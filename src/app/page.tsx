@@ -755,6 +755,8 @@ function TenantsTab() {
   const [invItems, setInvItems] = useState<
     { itemName: string; quantity: string; condition: string }[]
   >([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+  const [previousTenantName, setPreviousTenantName] = useState("");
+  const [loadingPrevItems, setLoadingPrevItems] = useState(false);
 
   // Vacate dialog
   const [vacateOpen, setVacateOpen] = useState(false);
@@ -787,14 +789,47 @@ function TenantsTab() {
   );
   const selectedRoom = selectedFloor?.rooms?.find((r) => r.id === tRoomId);
 
-  // When room is selected, set room number
+  // When room is selected, set room number and load previous inventory
   useEffect(() => {
     if (selectedRoom) {
       setTRoomNumber(selectedRoom.roomNumber);
+      // Auto-load previous tenant's inventory items
+      loadPreviousInventory(selectedRoom.id);
     } else {
       setTRoomNumber("");
+      setPreviousTenantName("");
     }
   }, [selectedRoom]);
+
+  const loadPreviousInventory = async (roomId: string) => {
+    try {
+      setLoadingPrevItems(true);
+      const res = await fetch(`/api/inventory?roomId=${roomId}&lastTenant=true`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      // data can be [] (no items) or { tenantName, tenantId, items: [...] }
+      if (Array.isArray(data) || !data.items || data.items.length === 0) {
+        // No previous items, keep empty form
+        setInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+        setPreviousTenantName("");
+      } else {
+        // Auto-fill inventory from previous tenant
+        setInvItems(
+          data.items.map((item: { itemName: string; quantity: number; condition: string }) => ({
+            itemName: item.itemName,
+            quantity: String(item.quantity),
+            condition: item.condition,
+          }))
+        );
+        setPreviousTenantName(data.tenantName || "");
+      }
+    } catch {
+      setInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+      setPreviousTenantName("");
+    } finally {
+      setLoadingPrevItems(false);
+    }
+  };
 
   const handleAddTenant = async () => {
     if (!tName.trim() || !tRoomId || !tStartDate) {
@@ -833,6 +868,7 @@ function TenantsTab() {
     setTRoomId("");
     setTRoomNumber("");
     setInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+    setPreviousTenantName("");
   };
 
   const addInvRow = () =>
@@ -1009,6 +1045,24 @@ function TenantsTab() {
 
               {/* Inventory items */}
               <div className="space-y-3">
+                {/* Auto-load banner */}
+                {previousTenantName && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <Package className="size-4 text-blue-600 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-800">
+                          আগের মালামাল অটো লোড হয়েছে
+                        </p>
+                        <p className="text-xs text-blue-600 mt-0.5">
+                          &quot;{previousTenantName}&quot; এর মালামালের তালিকা নিচে
+                          দেওয়া হয়েছে। প্রয়োজনে এডিট, মুছুন বা নতুন যোগ করুন।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <Label>প্রাথমিক মালামাল</Label>
                   <Button
@@ -1022,6 +1076,16 @@ function TenantsTab() {
                   </Button>
                 </div>
 
+                {loadingPrevItems && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="size-5 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                    <span className="text-sm text-muted-foreground ml-2">
+                      আগের মালামাল লোড হচ্ছে...
+                    </span>
+                  </div>
+                )}
+
+                {!loadingPrevItems && (
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {invItems.map((item, idx) => (
                     <div
@@ -1075,6 +1139,7 @@ function TenantsTab() {
                             <SelectItem value="ভালো">ভালো</SelectItem>
                             <SelectItem value="মাঝারি">মাঝারি</SelectItem>
                             <SelectItem value="খারাপ">খারাপ</SelectItem>
+                            <SelectItem value="নস্ট">নস্ট</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -1090,6 +1155,7 @@ function TenantsTab() {
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             </div>
 
@@ -1550,7 +1616,9 @@ function InventoryTab() {
                                 ? "border-emerald-300 text-emerald-700"
                                 : item.condition === "মাঝারি"
                                   ? "border-yellow-300 text-yellow-700"
-                                  : "border-red-300 text-red-700"
+                                  : item.condition === "নস্ট"
+                                    ? "border-violet-300 text-violet-700 bg-violet-50"
+                                    : "border-red-300 text-red-700"
                             }
                           >
                             {item.condition}
@@ -1771,6 +1839,7 @@ function InventoryTab() {
                     <SelectItem value="ভালো">ভালো</SelectItem>
                     <SelectItem value="মাঝারি">মাঝারি</SelectItem>
                     <SelectItem value="খারাপ">খারাপ</SelectItem>
+                    <SelectItem value="নস্ট">নস্ট</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1846,6 +1915,7 @@ function InventoryTab() {
                       <SelectItem value="ভালো">ভালো</SelectItem>
                       <SelectItem value="মাঝারি">মাঝারি</SelectItem>
                       <SelectItem value="খারাপ">খারাপ</SelectItem>
+                      <SelectItem value="নস্ট">নস্ট</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -2390,6 +2460,7 @@ function TroublesTab() {
                             <SelectItem value="ভালো">ভালো</SelectItem>
                             <SelectItem value="মাঝারি">মাঝারি</SelectItem>
                             <SelectItem value="খারাপ">খারাপ</SelectItem>
+                            <SelectItem value="নস্ট">নস্ট</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

@@ -8,6 +8,30 @@ export async function GET(req: NextRequest) {
     const roomId = searchParams.get('roomId');
     const tenantId = searchParams.get('tenantId');
     const roomNumber = searchParams.get('roomNumber');
+    const lastTenant = searchParams.get('lastTenant');
+
+    // If lastTenant=true && roomId provided, get the last (most recent) tenant's inventory for that room
+    if (lastTenant === 'true' && roomId) {
+      // Find the most recent tenant for this room (active or inactive)
+      const lastTenantRecord = await db.tenant.findFirst({
+        where: { roomId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!lastTenantRecord) {
+        return NextResponse.json([]);
+      }
+
+      const inventory = await db.inventory.findMany({
+        where: { tenantId: lastTenantRecord.id },
+        orderBy: { addedDate: 'asc' },
+      });
+      return NextResponse.json({
+        tenantName: lastTenantRecord.name,
+        tenantId: lastTenantRecord.id,
+        items: inventory,
+      });
+    }
 
     const where: Record<string, unknown> = {};
     if (roomId) where.roomId = roomId;
