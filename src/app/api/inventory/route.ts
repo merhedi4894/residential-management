@@ -31,15 +31,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { itemName, quantity, condition, roomNumber, tenantId, roomId, note } = body;
 
+    if (!itemName?.trim()) {
+      return NextResponse.json({ error: 'মালামালের নাম দিন' }, { status: 400 });
+    }
+
+    // If roomId not provided, try to find room by roomNumber
+    let resolvedRoomId = roomId;
+    if (!resolvedRoomId && roomNumber) {
+      const room = await db.room.findFirst({
+        where: { roomNumber: roomNumber.trim() },
+      });
+      if (room) {
+        resolvedRoomId = room.id;
+      }
+    }
+
+    if (!resolvedRoomId) {
+      return NextResponse.json({ error: 'রুম পাওয়া যায়নি। আগে রুম তৈরি করুন।' }, { status: 400 });
+    }
+
     const item = await db.inventory.create({
       data: {
-        itemName,
-        quantity: parseInt(quantity),
+        itemName: itemName.trim(),
+        quantity: parseInt(quantity) || 1,
         condition: condition || 'ভালো',
-        roomNumber,
+        roomNumber: (roomNumber || '').trim(),
         tenantId: tenantId || null,
-        roomId,
-        note: note || null,
+        roomId: resolvedRoomId,
+        note: note?.trim() || null,
       },
     });
 

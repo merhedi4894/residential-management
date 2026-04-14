@@ -46,12 +46,18 @@ export async function POST(req: NextRequest) {
 
     // Create initial inventory items
     if (inventoryItems && inventoryItems.length > 0) {
+      // Get roomNumber from room if not provided
+      let roomNumber = body.roomNumber || '';
+      if (!roomNumber) {
+        const room = await db.room.findUnique({ where: { id: roomId } });
+        if (room) roomNumber = room.roomNumber;
+      }
       await db.inventory.createMany({
         data: inventoryItems.map((item: { itemName: string; quantity: number; condition: string; note?: string }) => ({
           itemName: item.itemName,
-          quantity: parseInt(item.quantity),
+          quantity: parseInt(String(item.quantity)) || 1,
           condition: item.condition || 'ভালো',
-          roomNumber: body.roomNumber || '',
+          roomNumber,
           tenantId: tenant.id,
           roomId,
           note: item.note || null,

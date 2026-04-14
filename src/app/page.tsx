@@ -1394,7 +1394,11 @@ function InventoryTab() {
           note: invNote.trim() || null,
         }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "মালামাল যোগ করতে সমস্যা হয়েছে");
+        return;
+      }
       toast.success("মালামাল যোগ হয়েছে");
       setInvName("");
       setInvQty("1");
