@@ -523,7 +523,8 @@ function BuildingsTab() {
           onOpenChange={() => toggleBuilding(building.id)}
         >
           <Card className="overflow-hidden">
-            <CollapsibleTrigger className="w-full">
+            <CollapsibleTrigger className="w-full" asChild>
+              <div>
               <CardHeader className="hover:bg-emerald-50/50 transition-colors cursor-pointer py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -582,6 +583,7 @@ function BuildingsTab() {
                   </div>
                 </div>
               </CardHeader>
+              </div>
             </CollapsibleTrigger>
 
             <CollapsibleContent>
