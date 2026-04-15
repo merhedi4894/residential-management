@@ -16,3 +16,26 @@ Stage Summary:
 - সব API route কাজ করছে
 - Bengali (বাংলা) UI সহ responsive design
 - shadcn/ui components ব্যবহার করা হয়েছে
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: রুমভিত্তিক সার্চ সিস্টেম — ভাড়াটে ও মালামাল আলাদাভাবে সার্চ, এডিট, ডিলিট
+
+Work Log:
+- নতুন API endpoint `/api/room-wise-data` তৈরি: roomId দিয়ে current + previous tenants এবং inventory আলাদাভাবে রিটার্ন করে
+- Tenants API `/api/tenants` PATCH endpoint আপডেট: `action: "updateInfo"` দিয়ে ভাড়াটে নাম/ফোন এডিট সমর্থন যোগ করা হয়েছে
+- OverviewTab সম্পূর্ণ রিরাইট: পুরনো collapsible tree view বদলে নতুন search-based view
+- বিল্ডিং → রুম সিলেক্ট ক্যাসকেড (তলা অনুসারে গ্রুপ করা)
+- দুইটি সার্চ টাইপ: "ভাড়াটে তালিকা" এবং "মালামাল তালিকা" আলাদা বাটন
+- ভাড়াটে সার্চ: বর্তমান ভাড়াটে + পূর্বের ভাড়াটেগণ আলাদাভাবে দেখায় (এডিট/ডিলিট সহ)
+- মালামাল সার্চ: বর্তমান মালামাল + পূর্বের মালামাল আলাদাভাবে দেখায় (এডিট/ডিলিট/যোগ সহ)
+- ট্যাব লেবেল আপডেট: "বিল্ডিং অনুসারে" → "রুমভিত্তিক সার্চ"
+- SelectGroup/SelectLabel import যোগ করা হয়েছে
+- বিল্ড সফল, API টেস্ট পাস
+
+Stage Summary:
+- `/api/room-wise-data` API তৈরি ও টেস্টেড
+- OverviewTab সম্পূর্ণ নতুন ডিজাইনে রিরাইট
+- ভাড়াটে এবং মালামাল আলাদাভাবে সার্চ, এডিট, ডিলিট সুবিধা যোগ
+- বিল্ড সফল (Next.js 16 build pass)

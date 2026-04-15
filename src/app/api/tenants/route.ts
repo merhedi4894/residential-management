@@ -71,12 +71,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH vacate tenant
+// PATCH vacate tenant OR update tenant info
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, missingItems } = body;
+    const { id, action, name, phone } = body;
 
+    if (action === "updateInfo") {
+      // Update tenant name and/or phone
+      const updateData: Record<string, unknown> = {};
+      if (name !== undefined) updateData.name = name;
+      if (phone !== undefined) updateData.phone = phone || null;
+
+      const tenant = await db.tenant.update({
+        where: { id },
+        data: updateData,
+      });
+      return NextResponse.json(tenant);
+    }
+
+    // Default: vacate tenant
     const tenant = await db.tenant.update({
       where: { id },
       data: { isActive: false, endDate: new Date() },
