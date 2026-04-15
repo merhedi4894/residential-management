@@ -39,3 +39,37 @@ Stage Summary:
 - OverviewTab সম্পূর্ণ নতুন ডিজাইনে রিরাইট
 - ভাড়াটে এবং মালামাল আলাদাভাবে সার্চ, এডিট, ডিলিট সুবিধা যোগ
 - বিল্ড সফল (Next.js 16 build pass)
+---
+Task ID: 1
+Agent: Main Agent
+Task: Add login system with password recovery + improve OverviewTab search
+
+Work Log:
+- Read entire project structure, all API routes, schema, and page.tsx (3600+ lines)
+- Created /src/app/login/page.tsx with:
+  - First-time admin setup form (username, password, security question/answer)
+  - Login form with show/hide password toggle
+  - Password recovery flow (2 steps: enter username → answer security question)
+  - Auto-redirect to home if already authenticated
+- Created /src/middleware.ts for route protection
+  - Allows /login, /api/auth/*, static files without auth
+  - Redirects to /login if no session_token cookie
+- Modified /src/app/page.tsx:
+  - Added LogOut, KeyRound, Lock icon imports
+  - HomePage now checks /api/auth/me on load, redirects to /login if not authenticated
+  - Added change password dialog in HomePage
+  - DashboardHeader now shows user avatar, username, change password button, and logout button
+  - OverviewTab inventory results now use very compact box design:
+    - Tiny text (text-xs, text-[10px])
+    - Single-row table layout with divide-y borders
+    - Edit/delete buttons hidden by default, appear on hover
+    - Small badges for condition (text-[10px] h-4 px-1)
+  - Tenant search shows ONLY tenant list (current + previous) - no inventory
+  - Inventory search shows ONLY inventory list (current + previous) - no tenant info
+- Build succeeded with all routes properly configured
+
+Stage Summary:
+- Login system fully functional with setup, login, password recovery, and change password
+- Route protection via middleware (cookie-based)
+- OverviewTab now has clean separation: tenant view shows only tenants, inventory view shows only inventory in very compact rows
+- All files saved to /home/z/my-project/

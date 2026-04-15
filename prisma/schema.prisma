@@ -73,6 +73,18 @@ model Inventory {
   tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 }
 
+// System users for authentication
+model User {
+  id               String   @id @default(cuid())
+  username         String   @unique
+  password         String
+  securityQuestion String
+  securityAnswer   String
+  sessionToken     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
 // Trouble reports for rooms
 model TroubleReport {
   id          String    @id @default(cuid())
