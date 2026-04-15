@@ -21,6 +21,8 @@ import {
   Wrench,
   X,
   Edit3,
+  ClipboardList,
+  Eye,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -288,6 +290,11 @@ function MainTabs() {
           <span className="hidden sm:inline">মালামাল খোঁজ</span>
           <span className="sm:hidden">মালামাল</span>
         </TabsTrigger>
+        <TabsTrigger value="overview" className="flex-1 sm:flex-auto gap-1.5">
+          <ClipboardList className="size-4" />
+          <span className="hidden sm:inline">বিল্ডিং অনুসারে</span>
+          <span className="sm:hidden">তালিকা</span>
+        </TabsTrigger>
         <TabsTrigger value="troubles" className="flex-1 sm:flex-auto gap-1.5">
           <AlertTriangle className="size-4" />
           <span className="hidden sm:inline">ট্রাবল রিপোর্ট</span>
@@ -303,6 +310,9 @@ function MainTabs() {
       </TabsContent>
       <TabsContent value="inventory" className="mt-6">
         <InventoryTab />
+      </TabsContent>
+      <TabsContent value="overview" className="mt-6">
+        <OverviewTab />
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
         <TroublesTab />
@@ -2513,6 +2523,212 @@ function TroublesTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 5 — Building-wise Overview (Inventory + Tenant list)
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface OverviewBuilding {
+  id: string;
+  name: string;
+  totalFloors: number;
+  floors: OverviewFloor[];
+}
+
+interface OverviewFloor {
+  id: string;
+  floorNumber: number;
+  rooms: OverviewRoom[];
+}
+
+interface OverviewRoom {
+  id: string;
+  roomNumber: string;
+  activeTenant: { id: string; name: string; phone: string | null; startDate: string } | null;
+  allTenants: {
+    id: string; name: string; phone: string | null;
+    startDate: string; endDate: string | null; isActive: boolean;
+  }[];
+  inventories: {
+    id: string; itemName: string; quantity: number; condition: string;
+    note: string | null; addedDate: string;
+  }[];
+  totalInventoryItems: number;
+}
+
+function ovFloorLabel(n: number) {
+  const m: Record<number, string> = {
+    1: "১ম তলা", 2: "২য় তলা", 3: "৩য় তলা", 4: "৪র্থ তলা",
+    5: "৫ম তলা", 6: "৬ষ্ঠ তলা", 7: "৭ম তলা", 8: "৮ম তলা",
+    9: "৯ম তলা", 10: "১০ম তলা",
+  };
+  return m[n] || `${n} তলা`;
+}
+
+function OverviewTab() {
+  const [buildings, setBuildings] = useState<OverviewBuilding[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(new Set());
+  const [expandedRooms, setExpandedRooms] = useState<Set<string>>(new Set());
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/overview");
+      if (!res.ok) throw new Error();
+      setBuildings(await res.json());
+    } catch {
+      toast.error("ওভারভিউ লোড করতে সমস্যা হয়েছে");
+    } finally { setLoading(false); }
+  }, []);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const toggleB = (id: string) => setExpandedBuildings((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleR = (id: string) => setExpandedRooms((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const totalRooms = buildings.reduce((s, b) => s + b.floors.reduce((sf, f) => sf + f.rooms.length, 0), 0);
+  const totalOccupied = buildings.reduce((s, b) => s + b.floors.reduce((sf, f) => sf + f.rooms.filter((r) => r.activeTenant).length, 0), 0);
+  const totalInv = buildings.reduce((s, b) => s + b.floors.reduce((sf, f) => sf + f.rooms.reduce((sr, r) => sr + r.totalInventoryItems, 0), 0), 0);
+
+  if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /></div>);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-xl font-semibold flex items-center gap-2"><ClipboardList className="size-5 text-emerald-600" />বিল্ডিং ও রুম অনুসারে তালিকা</h2>
+        <Button variant="outline" className="gap-1.5 text-emerald-700 border-emerald-300 hover:bg-emerald-50" onClick={loadData}><Eye className="size-4" /> রিফ্রেশ</Button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border p-4"><div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><Building2 className="size-4" />মোট বিল্ডিং</div><p className="text-2xl font-bold text-emerald-700">{buildings.length}</p></div>
+        <div className="bg-white rounded-xl border p-4"><div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><BedDouble className="size-4" />মোট রুম</div><p className="text-2xl font-bold text-emerald-700">{totalRooms}</p></div>
+        <div className="bg-white rounded-xl border p-4"><div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><Users className="size-4" />ভর্তি রুম</div><p className="text-2xl font-bold text-blue-700">{totalOccupied}</p></div>
+        <div className="bg-white rounded-xl border p-4"><div className="flex items-center gap-2 text-muted-foreground text-sm mb-1"><Package className="size-4" />মোট মালামাল</div><p className="text-2xl font-bold text-amber-700">{totalInv}</p></div>
+      </div>
+      {buildings.length === 0 && (<Alert><ClipboardList className="size-4" /><AlertDescription>কোনো বিল্ডিং নেই। আগে বিল্ডিং তৈরি করুন।</AlertDescription></Alert>)}
+      {buildings.map((building) => {
+        const bRooms = building.floors.reduce((s, f) => s + f.rooms.length, 0);
+        const bOcc = building.floors.reduce((s, f) => s + f.rooms.filter((r) => r.activeTenant).length, 0);
+        const bItems = building.floors.reduce((s, f) => s + f.rooms.reduce((sr, r) => sr + r.totalInventoryItems, 0), 0);
+        const bOpen = expandedBuildings.has(building.id);
+        return (
+          <Collapsible key={building.id} open={bOpen} onOpenChange={() => toggleB(building.id)}>
+            <Card className="overflow-hidden">
+              <CollapsibleTrigger className="w-full" asChild>
+                <div>
+                  <CardHeader className="hover:bg-emerald-50/50 transition-colors cursor-pointer py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-center size-10 rounded-lg bg-emerald-100 text-emerald-700"><Building2 className="size-5" /></div>
+                        <div className="text-left">
+                          <CardTitle className="text-lg">{building.name}</CardTitle>
+                          <p className="text-sm text-muted-foreground">তলা: {building.totalFloors} &bull; রুম: {bRooms} &bull; ভর্তি: {bOcc} &bull; মালামাল: {bItems}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={bOcc === bRooms ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300" : "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-300"}>
+                          {bOcc === bRooms ? "সব ভর্তি" : `${bOcc}/${bRooms} ভর্তি`}
+                        </Badge>
+                        {bOpen ? <ChevronDown className="size-5 text-muted-foreground" /> : <ChevronRight className="size-5 text-muted-foreground" />}
+                      </div>
+                    </div>
+                  </CardHeader>
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border-t">
+                  {building.floors.map((floor) => (
+                    <div key={floor.id} className="border-b last:border-b-0 p-4">
+                      <h4 className="font-medium text-sm flex items-center gap-2 mb-3">
+                        <span className="flex items-center justify-center size-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">{floor.floorNumber}</span>
+                        {ovFloorLabel(floor.floorNumber)}
+                        <span className="text-xs text-muted-foreground font-normal">({floor.rooms.length} রুম)</span>
+                      </h4>
+                      {floor.rooms.length === 0 && <p className="text-sm text-muted-foreground pl-8">এই তলায় কোনো রুম নেই</p>}
+                      <div className="space-y-2 pl-2">
+                        {floor.rooms.map((room) => {
+                          const rOpen = expandedRooms.has(room.id);
+                          return (
+                            <Collapsible key={room.id} open={rOpen} onOpenChange={() => toggleR(room.id)}>
+                              <Card className="overflow-hidden shadow-sm">
+                                <CollapsibleTrigger className="w-full" asChild>
+                                  <div>
+                                    <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50/50 transition-colors cursor-pointer">
+                                      <div className="flex items-center gap-3">
+                                        <BedDouble className="size-4 text-emerald-600" />
+                                        <span className="font-semibold text-sm">{room.roomNumber}</span>
+                                        {room.activeTenant ? (<Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 text-xs"><Users className="size-3 mr-1" />{room.activeTenant.name}</Badge>) : (<Badge variant="secondary" className="text-xs">খালি</Badge>)}
+                                        <span className="text-xs text-muted-foreground">মালামাল: {room.totalInventoryItems}</span>
+                                      </div>
+                                      <div>{rOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}</div>
+                                    </div>
+                                  </div>
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                  <div className="border-t px-4 py-3 space-y-4 bg-gray-50/30">
+                                    {room.activeTenant && (
+                                      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                                        <p className="text-xs text-emerald-700 font-medium mb-1">বর্তমান ভাড়াটে</p>
+                                        <div className="grid grid-cols-3 gap-2 text-sm">
+                                          <div><span className="text-muted-foreground text-xs">নাম</span><p className="font-medium">{room.activeTenant.name}</p></div>
+                                          <div><span className="text-muted-foreground text-xs">ফোন</span><p className="font-medium">{room.activeTenant.phone || "-"}</p></div>
+                                          <div><span className="text-muted-foreground text-xs">শুরু</span><p className="font-medium">{formatDate(room.activeTenant.startDate)}</p></div>
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div>
+                                      <h5 className="text-sm font-semibold flex items-center gap-1.5 mb-2"><Package className="size-3.5 text-amber-600" />মালামাল তালিকা<Badge variant="secondary" className="text-xs ml-1">{room.inventories.length}</Badge></h5>
+                                      {room.inventories.length === 0 ? (<p className="text-xs text-muted-foreground pl-6">কোনো মালামালের রেকর্ড নেই</p>) : (
+                                        <div className="border rounded-lg overflow-hidden">
+                                          <Table>
+                                            <TableHeader><TableRow className="bg-gray-100"><TableHead className="text-xs h-8">নাম</TableHead><TableHead className="text-xs h-8 w-16 text-center">পরিমাণ</TableHead><TableHead className="text-xs h-8 w-20">অবস্থা</TableHead><TableHead className="text-xs h-8 hidden sm:table-cell">নোট</TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                              {room.inventories.map((inv) => (
+                                                <TableRow key={inv.id}>
+                                                  <TableCell className="text-sm py-1.5">{inv.itemName}</TableCell>
+                                                  <TableCell className="text-sm py-1.5 text-center">{inv.quantity}</TableCell>
+                                                  <TableCell className="text-sm py-1.5"><Badge variant="outline" className={inv.condition === "ভালো" ? "border-emerald-300 text-emerald-700 text-xs" : inv.condition === "মাঝারি" ? "border-yellow-300 text-yellow-700 text-xs" : inv.condition === "নস্ট" ? "border-violet-300 text-violet-700 bg-violet-50 text-xs" : "border-red-300 text-red-700 text-xs"}>{inv.condition}</Badge></TableCell>
+                                                  <TableCell className="text-xs py-1.5 text-muted-foreground hidden sm:table-cell max-w-40 truncate">{inv.note || "-"}</TableCell>
+                                                </TableRow>
+                                              ))}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <h5 className="text-sm font-semibold flex items-center gap-1.5 mb-2"><Users className="size-3.5 text-blue-600" />ভাড়াটে তালিকা<Badge variant="secondary" className="text-xs ml-1">{room.allTenants.length}</Badge></h5>
+                                      {room.allTenants.length === 0 ? (<p className="text-xs text-muted-foreground pl-6">কোনো ভাড়াটের রেকর্ড নেই</p>) : (
+                                        <div className="space-y-1.5">
+                                          {room.allTenants.map((t) => (
+                                            <div key={t.id} className="flex items-center justify-between bg-white rounded-lg border px-3 py-2 text-sm">
+                                              <div className="flex items-center gap-2"><Users className="size-3.5 text-muted-foreground" /><span className="font-medium">{t.name}</span>{t.phone && <span className="text-xs text-muted-foreground">{t.phone}</span>}</div>
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-xs text-muted-foreground hidden sm:inline">{formatDate(t.startDate)}{t.endDate && ` — ${formatDate(t.endDate)}`}</span>
+                                                {t.isActive ? (<Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 text-xs">সক্রিয়</Badge>) : (<Badge variant="secondary" className="text-xs">অসক্রিয়</Badge>)}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </CollapsibleContent>
+                              </Card>
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
+        );
+      })}
     </div>
   );
 }
