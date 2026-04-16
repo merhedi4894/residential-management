@@ -30,30 +30,32 @@ model Floor {
 
 // Rooms on a floor
 model Room {
-  id        String  @id @default(cuid())
-  roomNumber String
-  floorId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  floor     Floor   @relation(fields: [floorId], references: [id], onDelete: Cascade)
-  tenants   Tenant[]
-  inventories Inventory[]
+  id            String          @id @default(cuid())
+  roomNumber    String
+  floorId       String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  floor         Floor           @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  tenants       Tenant[]
+  inventories   Inventory[]
   troubleReports TroubleReport[]
+  vacateRecords VacateRecord[]
 }
 
 // Tenants occupying rooms
 model Tenant {
-  id          String   @id @default(cuid())
-  name        String
-  phone       String?
-  roomId      String
-  startDate   DateTime
-  endDate     DateTime?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  inventories Inventory[]
+  id            String          @id @default(cuid())
+  name          String
+  phone         String?
+  roomId        String
+  startDate     DateTime
+  endDate       DateTime?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  inventories   Inventory[]
+  vacateRecords VacateRecord[]
 }
 
 // Inventory items in a room - tracks items per tenant occupancy
@@ -81,6 +83,7 @@ model User {
   securityQuestion String
   securityAnswer   String
   sessionToken     String?
+  isSetup          Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -100,6 +103,20 @@ model TroubleReport {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+// Vacate records when tenant leaves
+model VacateRecord {
+  id               String   @id @default(cuid())
+  tenantId         String
+  tenantName       String
+  roomId           String
+  roomNumber       String
+  vacatedAt        DateTime @default(now())
+  inventorySnapshot String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  room             Room     @relation(fields: [roomId], references: [id])
+  createdAt        DateTime @default(now())
 }
 
 // Guest management

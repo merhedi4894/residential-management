@@ -66,6 +66,12 @@ export async function GET(req: NextRequest) {
       previousInventory = [];
     }
 
+    // Get vacate records for this room (with inventory snapshots)
+    const vacateRecords = await db.vacateRecord.findMany({
+      where: { roomId },
+      orderBy: { vacatedAt: 'desc' },
+    });
+
     return NextResponse.json({
       roomNumber: room.roomNumber,
       currentTenant: currentTenant
@@ -102,6 +108,13 @@ export async function GET(req: NextRequest) {
         addedDate: inv.addedDate,
         tenantId: inv.tenantId,
         tenantName: inv.tenant?.name || null,
+      })),
+      vacateRecords: vacateRecords.map((vr) => ({
+        id: vr.id,
+        tenantId: vr.tenantId,
+        tenantName: vr.tenantName,
+        vacatedAt: vr.vacatedAt,
+        inventorySnapshot: vr.inventorySnapshot,
       })),
     });
   } catch (error) {

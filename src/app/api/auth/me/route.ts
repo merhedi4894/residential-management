@@ -12,14 +12,18 @@ export async function GET(req: NextRequest) {
 
     const user = await db.user.findFirst({
       where: { sessionToken },
-      select: { id: true, username: true },
+      select: { id: true, username: true, isSetup: true },
     });
 
     if (!user) {
       return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    return NextResponse.json({ authenticated: true, user });
+    return NextResponse.json({
+      authenticated: true,
+      user: { id: user.id, username: user.username },
+      needsSetup: !user.isSetup,
+    });
   } catch {
     return NextResponse.json({ authenticated: false }, { status: 401 });
   }

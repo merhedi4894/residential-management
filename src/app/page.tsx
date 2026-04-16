@@ -277,11 +277,16 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50/30">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50/30 flex flex-col">
       <Toaster position="top-right" richColors />
-      <div className="container mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="container mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 flex-1">
         <DashboardHeader user={user} onLogout={handleLogout} onChangePassword={() => { setCurrentPass(""); setNewPass(""); setChangePassOpen(true); }} />
         <MainTabs />
+        <footer className="mt-12 border-t pt-6 pb-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            Md. Mehedi Hasan, Caretaker, EGB PLC.
+          </p>
+        </footer>
       </div>
 
       {/* Change Password Dialog */}
@@ -355,12 +360,9 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
               <Building2 className="size-5" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              অফিস আবাসিক ম্যানেজমেন্ট সিস্টেম
+              আবাসিক ম্যানেজমেন্ট
             </h1>
           </div>
-          <p className="text-muted-foreground text-sm sm:text-base">
-            আবাসিক এলাকার সামগ্রিক পরিচালনা ও তথ্য ব্যবস্থাপনা
-          </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
@@ -391,7 +393,7 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
                 {user?.username?.charAt(0)?.toUpperCase() || "A"}
               </div>
               <span className="text-sm font-medium text-emerald-800 hidden sm:inline">
-                {user?.username || "Admin"}
+                Admin
               </span>
             </div>
             <Button
@@ -435,11 +437,6 @@ function MainTabs() {
           <span className="hidden sm:inline">ভাড়াটে ম্যানেজমেন্ট</span>
           <span className="sm:hidden">ভাড়াটে</span>
         </TabsTrigger>
-        <TabsTrigger value="inventory" className="flex-1 sm:flex-auto gap-1.5">
-          <Package className="size-4" />
-          <span className="hidden sm:inline">মালামাল খোঁজ</span>
-          <span className="sm:hidden">মালামাল</span>
-        </TabsTrigger>
         <TabsTrigger value="overview" className="flex-1 sm:flex-auto gap-1.5">
           <ClipboardList className="size-4" />
           <span className="hidden sm:inline">রুমভিত্তিক সার্চ</span>
@@ -457,9 +454,6 @@ function MainTabs() {
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
         <TenantsTab />
-      </TabsContent>
-      <TabsContent value="inventory" className="mt-6">
-        <InventoryTab />
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
         <OverviewTab />
@@ -1561,591 +1555,7 @@ function TenantsTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 3 — Inventory Search
-// ═══════════════════════════════════════════════════════════════════════════
-
-function InventoryTab() {
-  const [searchRoomNumber, setSearchRoomNumber] = useState("");
-  const [searched, setSearched] = useState(false);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [tenantHistory, setTenantHistory] = useState<Tenant[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-
-  // Add inventory dialog
-  const [addInvOpen, setAddInvOpen] = useState(false);
-  const [invName, setInvName] = useState("");
-  const [invQty, setInvQty] = useState("1");
-  const [invCondition, setInvCondition] = useState("ভালো");
-  const [invNote, setInvNote] = useState("");
-  const [invRoomId, setInvRoomId] = useState("");
-  const [invTenantId, setInvTenantId] = useState("");
-
-  // Edit inventory dialog
-  const [editInvOpen, setEditInvOpen] = useState(false);
-  const [editItem, setEditItem] = useState<InventoryItem | null>(null);
-
-  const handleSearch = async () => {
-    if (!searchRoomNumber.trim()) {
-      toast.error("রুম নম্বর দিন");
-      return;
-    }
-    try {
-      setSearchLoading(true);
-      const [invRes, tenRes] = await Promise.all([
-        fetch(`/api/inventory?roomNumber=${encodeURIComponent(searchRoomNumber.trim())}`),
-        fetch("/api/tenants"),
-      ]);
-      if (!invRes.ok || !tenRes.ok) throw new Error();
-      const invData = await invRes.json();
-      const tenData = await tenRes.json();
-
-      setInventory(invData);
-
-      // Filter tenants for this room
-      const roomItem = invData.find((i: InventoryItem) => i.roomId);
-      const rid = roomItem?.roomId;
-      setTenantHistory(
-        rid
-          ? tenData.filter((t: Tenant) => t.roomId === rid)
-          : tenData.filter(
-              (t: Tenant) =>
-                t.room?.roomNumber === searchRoomNumber.trim()
-            )
-      );
-
-      if (rid) {
-        setInvRoomId(rid);
-        // Find active tenant
-        const activeTenant = tenData.find(
-          (t: Tenant) => t.roomId === rid && t.isActive
-        );
-        setInvTenantId(activeTenant?.id || "");
-      }
-
-      setSearched(true);
-    } catch {
-      toast.error("খুঁজতে সমস্যা হয়েছে");
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleAddInventory = async () => {
-    if (!invName.trim()) {
-      toast.error("মালামালের নাম দিন");
-      return;
-    }
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: invName.trim(),
-          quantity: parseInt(invQty) || 1,
-          condition: invCondition,
-          roomNumber: searchRoomNumber.trim(),
-          tenantId: invTenantId || null,
-          roomId: invRoomId,
-          note: invNote.trim() || null,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "মালামাল যোগ করতে সমস্যা হয়েছে");
-        return;
-      }
-      toast.success("মালামাল যোগ হয়েছে");
-      setInvName("");
-      setInvQty("1");
-      setInvCondition("ভালো");
-      setInvNote("");
-      setAddInvOpen(false);
-      handleSearch();
-    } catch {
-      toast.error("মালামাল যোগ করতে সমস্যা হয়েছে");
-    }
-  };
-
-  const handleDeleteInventory = async (id: string) => {
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("মালামাল মুছে ফেলা হয়েছে");
-      handleSearch();
-    } catch {
-      toast.error("মালামাল মুছে ফেলতে সমস্যা হয়েছে");
-    }
-  };
-
-  const handleEditInventory = async () => {
-    if (!editItem) return;
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editItem.id,
-          itemName: editItem.itemName,
-          quantity: editItem.quantity,
-          condition: editItem.condition,
-          note: editItem.note,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("মালামাল আপডেট হয়েছে");
-      setEditInvOpen(false);
-      setEditItem(null);
-      handleSearch();
-    } catch {
-      toast.error("মালামাল আপডেট করতে সমস্যা হয়েছে");
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Package className="size-5 text-emerald-600" />
-        রুম অনুসারে মালামাল খোঁজ
-      </h2>
-
-      {/* Search */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <Input
-                placeholder="রুম নম্বর লিখুন (যেমন: ১০১)"
-                value={searchRoomNumber}
-                onChange={(e) => setSearchRoomNumber(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              />
-            </div>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              onClick={handleSearch}
-              disabled={searchLoading}
-            >
-              {searchLoading ? (
-                <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Search className="size-4" />
-              )}
-              খুঁজুন
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {!searched && (
-        <Alert>
-          <Search className="size-4" />
-          <AlertDescription>
-            রুম নম্বর দিয়ে মালামাল খুঁজুন
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {searched && (
-        <>
-          {/* Current inventory */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h3 className="text-lg font-semibold">
-              বর্তমান মালামাল{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                (রুম: {searchRoomNumber})
-              </span>
-            </h3>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              size="sm"
-              onClick={() => setAddInvOpen(true)}
-            >
-              <Plus className="size-4" />
-              নতুন মালামাল যোগ
-            </Button>
-          </div>
-
-          {inventory.length === 0 ? (
-            <Alert>
-              <Package className="size-4" />
-              <AlertDescription>
-                এই রুমে কোনো মালামাল নেই
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Card className="hidden md:block">
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-emerald-50/50">
-                      <TableHead>নাম</TableHead>
-                      <TableHead>পরিমাণ</TableHead>
-                      <TableHead>অবস্থা</TableHead>
-                      <TableHead>তারিখ</TableHead>
-                      <TableHead>নোট</TableHead>
-                      <TableHead>অ্যাকশন</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {inventory.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="font-medium">
-                          {item.itemName}
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              item.condition === "ভালো"
-                                ? "border-emerald-300 text-emerald-700"
-                                : item.condition === "মাঝারি"
-                                  ? "border-yellow-300 text-yellow-700"
-                                  : item.condition === "নস্ট"
-                                    ? "border-violet-300 text-violet-700 bg-violet-50"
-                                    : "border-red-300 text-red-700"
-                            }
-                          >
-                            {item.condition}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatDate(item.addedDate)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-32 truncate">
-                          {item.note || "-"}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                              onClick={() => {
-                                setEditItem(item);
-                                setEditInvOpen(true);
-                              }}
-                            >
-                              <Edit3 className="size-3.5" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    মালামাল মুছে ফেলবেন?
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    &quot;{item.itemName}&quot; স্থায়ীভাবে
-                                    মুছে যাবে।
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>
-                                    বাতিল
-                                  </AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-red-600 hover:bg-red-700 text-white"
-                                    onClick={() =>
-                                      handleDeleteInventory(item.id)
-                                    }
-                                  >
-                                    মুছে ফেলুন
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Mobile cards for inventory */}
-          <div className="md:hidden space-y-2">
-            {inventory.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                কোনো মালামাল নেই
-              </p>
-            )}
-            {inventory.map((item) => (
-              <Card key={item.id}>
-                <CardContent className="p-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium">{item.itemName}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        পরিমাণ: {item.quantity} • {item.condition} •{" "}
-                        {formatDate(item.addedDate)}
-                      </p>
-                      {item.note && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {item.note}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                        onClick={() => {
-                          setEditItem(item);
-                          setEditInvOpen(true);
-                        }}
-                      >
-                        <Edit3 className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                        onClick={() => handleDeleteInventory(item.id)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Tenant history */}
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-3">
-              ভাড়াটে ইতিহাস
-            </h3>
-            {tenantHistory.length === 0 ? (
-              <Alert>
-                <Users className="size-4" />
-                <AlertDescription>
-                  এই রুমে কোনো ভাড়াটের রেকর্ড নেই
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-3">
-                {tenantHistory.map((tenant) => (
-                  <Card key={tenant.id}>
-                    <CardHeader className="pb-2 pt-4 px-4">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
-                          {tenant.name}
-                        </CardTitle>
-                        <Badge
-                          className={
-                            tenant.isActive
-                              ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-100 border-gray-300"
-                          }
-                        >
-                          {tenant.isActive ? "সক্রিয়" : "অসক্রিয়"}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="px-4 pb-4">
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(tenant.startDate)}
-                        {tenant.endDate && ` — ${formatDate(tenant.endDate)}`}
-                      </p>
-                      {tenant.inventories && tenant.inventories.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs text-muted-foreground mb-1">
-                            মালামাল:
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {tenant.inventories.map((inv) => (
-                              <Badge key={inv.id} variant="outline" className="text-xs">
-                                {inv.itemName} ({inv.quantity}) - {inv.condition}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Add inventory dialog */}
-      <Dialog open={addInvOpen} onOpenChange={setAddInvOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>নতুন মালামাল যোগ করুন</DialogTitle>
-            <DialogDescription>
-              রুম {searchRoomNumber} এ নতুন মালামাল যোগ করুন
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>মালামালের নাম *</Label>
-              <Input
-                placeholder="যেমন: ফ্যান"
-                value={invName}
-                onChange={(e) => setInvName(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>পরিমাণ</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={invQty}
-                  onChange={(e) => setInvQty(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>অবস্থা</Label>
-                <Select
-                  value={invCondition}
-                  onValueChange={setInvCondition}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ভালো">ভালো</SelectItem>
-                    <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                    <SelectItem value="খারাপ">খারাপ</SelectItem>
-                    <SelectItem value="নস্ট">নস্ট</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>নোট (ঐচ্ছিক)</Label>
-              <Textarea
-                placeholder="কোনো বিশেষ নোট"
-                value={invNote}
-                onChange={(e) => setInvNote(e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddInvOpen(false)}>
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleAddInventory}
-            >
-              যোগ করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit inventory dialog */}
-      <Dialog open={editInvOpen} onOpenChange={setEditInvOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>মালামাল সম্পাদনা</DialogTitle>
-          </DialogHeader>
-          {editItem && (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>মালামালের নাম</Label>
-                <Input
-                  value={editItem.itemName}
-                  onChange={(e) =>
-                    setEditItem({ ...editItem, itemName: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>পরিমাণ</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={editItem.quantity}
-                    onChange={(e) =>
-                      setEditItem({
-                        ...editItem,
-                        quantity: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>অবস্থা</Label>
-                  <Select
-                    value={editItem.condition}
-                    onValueChange={(v) =>
-                      setEditItem({ ...editItem, condition: v })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ভালো">ভালো</SelectItem>
-                      <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                      <SelectItem value="খারাপ">খারাপ</SelectItem>
-                      <SelectItem value="নস্ট">নস্ট</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>নোট</Label>
-                <Textarea
-                  value={editItem.note || ""}
-                  onChange={(e) =>
-                    setEditItem({ ...editItem, note: e.target.value })
-                  }
-                  rows={2}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditInvOpen(false);
-                setEditItem(null);
-              }}
-            >
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleEditInventory}
-            >
-              আপডেট করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TAB 4 — Trouble Reports
+// TAB 3 — Trouble Reports
 // ═══════════════════════════════════════════════════════════════════════════
 
 function TroublesTab() {
@@ -2707,7 +2117,7 @@ function TroublesTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 5 — Room-wise Search (Tenants + Inventory with edit/delete)
+// TAB 4 — Room-wise Search (Tenants + Inventory combined view)
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface RoomWiseData {
@@ -2729,6 +2139,19 @@ interface RoomWiseData {
     note: string | null; addedDate: string; tenantId: string | null;
     tenantName: string | null;
   }[];
+  vacateRecords: {
+    id: string; tenantId: string; tenantName: string;
+    vacatedAt: string; inventorySnapshot: string;
+  }[];
+}
+
+interface VacateInventoryItem {
+  id?: string;
+  itemName: string;
+  quantity: number;
+  condition: string;
+  note?: string | null;
+  _delete?: boolean;
 }
 
 function getConditionBadge(condition: string) {
@@ -2752,871 +2175,160 @@ function OverviewTab() {
   const [buildingId, setBuildingId] = useState("");
   const [floorId, setFloorId] = useState("");
   const [roomId, setRoomId] = useState("");
-  const [searchType, setSearchType] = useState<"tenant" | "inventory">("tenant");
   const [searched, setSearched] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [data, setData] = useState<RoomWiseData | null>(null);
+  const [prevPage, setPrevPage] = useState(1);
+  const prevPerPage = 5;
 
-  // Edit tenant
   const [editTenantOpen, setEditTenantOpen] = useState(false);
-  const [editTenantData, setEditTenantData] = useState<{
-    id: string; name: string; phone: string;
-  } | null>(null);
-
-  // Edit inventory
+  const [editTenantData, setEditTenantData] = useState<{ id: string; name: string; phone: string; } | null>(null);
   const [editInvOpen, setEditInvOpen] = useState(false);
-  const [editInvItem, setEditInvItem] = useState<{
-    id: string; itemName: string; quantity: number; condition: string; note: string | null;
-  } | null>(null);
-
-  // Add inventory to specific tenant context
+  const [editInvItem, setEditInvItem] = useState<{ id: string; itemName: string; quantity: number; condition: string; note: string | null; } | null>(null);
   const [addInvOpen, setAddInvOpen] = useState(false);
-  const [addInvTarget, setAddInvTarget] = useState<"current" | "previous">("current");
   const [addInvName, setAddInvName] = useState("");
   const [addInvQty, setAddInvQty] = useState("1");
   const [addInvCondition, setAddInvCondition] = useState("ভালো");
   const [addInvNote, setAddInvNote] = useState("");
   const [addInvTenantId, setAddInvTenantId] = useState("");
+  const [vacateOpen, setVacateOpen] = useState(false);
+  const [vacateItems, setVacateItems] = useState<VacateInventoryItem[]>([]);
+  const [vacateLoading, setVacateLoading] = useState(false);
+  const [expandedPrevTenant, setExpandedPrevTenant] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/buildings")
-      .then((r) => r.json())
-      .then(setBuildings)
-      .catch(() => {});
-  }, []);
-
+  useEffect(() => { fetch("/api/buildings").then((r) => r.json()).then(setBuildings).catch(() => {}); }, []);
   const selectedBuilding = buildings.find((b) => b.id === buildingId);
   const selectedFloor = selectedBuilding?.floors?.find((f) => f.id === floorId);
 
   const handleSearch = async () => {
-    if (!roomId) {
-      toast.error("বিল্ডিং এবং রুম নির্বাচন করুন");
-      return;
-    }
+    if (!roomId) { toast.error("বিল্ডিং এবং রুম নির্বাচন করুন"); return; }
     try {
       setSearchLoading(true);
       const res = await fetch(`/api/room-wise-data?roomId=${roomId}`);
       if (!res.ok) throw new Error();
-      const result = await res.json();
-      setData(result);
-      setSearched(true);
-    } catch {
-      toast.error("তথ্য লোড করতে সমস্যা হয়েছে");
-    } finally {
-      setSearchLoading(false);
-    }
+      setData(await res.json());
+      setSearched(true); setPrevPage(1);
+    } catch { toast.error("তথ্য লোড করতে সমস্যা হয়েছে"); } finally { setSearchLoading(false); }
   };
 
-  // ── Tenant CRUD ──
+  const openVacateDialog = () => {
+    if (!data?.currentTenant) return;
+    const items: VacateInventoryItem[] = data.currentInventory.map((inv) => ({ id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note }));
+    setVacateItems(items.length > 0 ? items : [{ itemName: "", quantity: 1, condition: "ভালো" }]);
+    setVacateOpen(true);
+  };
+  const updateVacateItem = (idx: number, field: keyof VacateInventoryItem, value: string | number) => { setVacateItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))); };
+  const removeVacateItem = (idx: number) => { if (vacateItems.length <= 1) return; setVacateItems((prev) => prev.filter((_, i) => i !== idx)); };
+  const addVacateItem = () => { setVacateItems((prev) => [...prev, { itemName: "", quantity: 1, condition: "ভালো" }]); };
+
+  const handleVacate = async () => {
+    if (!data?.currentTenant) return;
+    try {
+      setVacateLoading(true);
+      const res = await fetch("/api/vacate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId: data.currentTenant.id, inventoryItems: vacateItems.filter((item) => item.itemName.trim() || item.id) }) });
+      if (!res.ok) { const errData = await res.json(); toast.error(errData.error || "রুম ছেড়ে দিতে সমস্যা হয়েছে"); return; }
+      toast.success("ভাড়াটে রুম ছেড়ে দিয়েছেন"); setVacateOpen(false); handleSearch();
+    } catch { toast.error("রুম ছেড়ে দিতে সমস্যা হয়েছে"); } finally { setVacateLoading(false); }
+  };
+
   const handleEditTenant = async () => {
     if (!editTenantData) return;
-    try {
-      const res = await fetch("/api/tenants", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editTenantData.id,
-          action: "updateInfo",
-          name: editTenantData.name,
-          phone: editTenantData.phone || null,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("ভাড়াটে তথ্য আপডেট হয়েছে");
-      setEditTenantOpen(false);
-      setEditTenantData(null);
-      handleSearch();
-    } catch {
-      toast.error("আপডেট করতে সমস্যা হয়েছে");
-    }
+    try { const res = await fetch("/api/tenants", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editTenantData.id, action: "updateInfo", name: editTenantData.name, phone: editTenantData.phone || null }) }); if (!res.ok) throw new Error(); toast.success("ভাড়াটে তথ্য আপডেট হয়েছে"); setEditTenantOpen(false); setEditTenantData(null); handleSearch(); } catch { toast.error("আপডেট করতে সমস্যা হয়েছে"); }
   };
+  const handleDeleteTenant = async (id: string) => { try { const res = await fetch("/api/tenants", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); if (!res.ok) throw new Error(); toast.success("ভাড়াটে মুছে ফেলা হয়েছে"); handleSearch(); } catch { toast.error("মুছে ফেলতে সমস্যা হয়েছে"); } };
+  const handleEditInventory = async () => { if (!editInvItem) return; try { const res = await fetch("/api/inventory", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editInvItem.id, itemName: editInvItem.itemName, quantity: editInvItem.quantity, condition: editInvItem.condition, note: editInvItem.note }) }); if (!res.ok) throw new Error(); toast.success("মালামাল আপডেট হয়েছে"); setEditInvOpen(false); setEditInvItem(null); handleSearch(); } catch { toast.error("মালামাল আপডেট করতে সমস্যা হয়েছে"); } };
+  const handleDeleteInventory = async (id: string) => { try { const res = await fetch("/api/inventory", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); if (!res.ok) throw new Error(); toast.success("মালামাল মুছে ফেলা হয়েছে"); handleSearch(); } catch { toast.error("মালামাল মুছে ফেলতে সমস্যা হয়েছে"); } };
+  const handleAddInventory = async () => { if (!addInvName.trim() || !data) { toast.error("মালামালের নাম দিন"); return; } try { const res = await fetch("/api/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemName: addInvName.trim(), quantity: parseInt(addInvQty) || 1, condition: addInvCondition, roomNumber: data.roomNumber, tenantId: addInvTenantId || null, roomId, note: addInvNote.trim() || null }) }); const resData = await res.json(); if (!res.ok) { toast.error(resData.error || "মালামাল যোগ করতে সমস্যা"); return; } toast.success("মালামাল যোগ হয়েছে"); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(false); handleSearch(); } catch { toast.error("মালামাল যোগ করতে সমস্যা"); } };
 
-  const handleDeleteTenant = async (id: string) => {
-    try {
-      const res = await fetch("/api/tenants", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("ভাড়াটে মুছে ফেলা হয়েছে");
-      handleSearch();
-    } catch {
-      toast.error("মুছে ফেলতে সমস্যা হয়েছে");
-    }
-  };
-
-  // ── Inventory CRUD ──
-  const handleEditInventory = async () => {
-    if (!editInvItem) return;
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editInvItem.id,
-          itemName: editInvItem.itemName,
-          quantity: editInvItem.quantity,
-          condition: editInvItem.condition,
-          note: editInvItem.note,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("মালামাল আপডেট হয়েছে");
-      setEditInvOpen(false);
-      setEditInvItem(null);
-      handleSearch();
-    } catch {
-      toast.error("মালামাল আপডেট করতে সমস্যা হয়েছে");
-    }
-  };
-
-  const handleDeleteInventory = async (id: string) => {
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success("মালামাল মুছে ফেলা হয়েছে");
-      handleSearch();
-    } catch {
-      toast.error("মালামাল মুছে ফেলতে সমস্যা হয়েছে");
-    }
-  };
-
-  const handleAddInventory = async () => {
-    if (!addInvName.trim() || !data) {
-      toast.error("মালামালের নাম দিন");
-      return;
-    }
-    try {
-      const res = await fetch("/api/inventory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemName: addInvName.trim(),
-          quantity: parseInt(addInvQty) || 1,
-          condition: addInvCondition,
-          roomNumber: data.roomNumber,
-          tenantId: addInvTenantId || null,
-          roomId: roomId,
-          note: addInvNote.trim() || null,
-        }),
-      });
-      const resData = await res.json();
-      if (!res.ok) {
-        toast.error(resData.error || "মালামাল যোগ করতে সমস্যা হয়েছে");
-        return;
-      }
-      toast.success("মালামাল যোগ হয়েছে");
-      setAddInvName("");
-      setAddInvQty("1");
-      setAddInvCondition("ভালো");
-      setAddInvNote("");
-      setAddInvOpen(false);
-      handleSearch();
-    } catch {
-      toast.error("মালামাল যোগ করতে সমস্যা হয়েছে");
-    }
-  };
+  const totalPrevPages = data ? Math.ceil(data.previousTenants.length / prevPerPage) : 0;
+  const paginatedPrevTenants = data?.previousTenants.slice((prevPage - 1) * prevPerPage, prevPage * prevPerPage) || [];
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold flex items-center gap-2">
-        <ClipboardList className="size-5 text-emerald-600" />
-        রুমভিত্তিক তালিকা
-      </h2>
+      <h2 className="text-xl font-semibold flex items-center gap-2"><ClipboardList className="size-5 text-emerald-600" />রুমভিত্তিক তালিকা</h2>
+      <Card><CardContent className="p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-1.5"><Label>বিল্ডিং নির্বাচন</Label><Select value={buildingId} onValueChange={(v) => { setBuildingId(v); setFloorId(""); setRoomId(""); setSearched(false); setData(null); }}><SelectTrigger className="w-full"><SelectValue placeholder="বিল্ডিং বেছে নিন" /></SelectTrigger><SelectContent>{buildings.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>তলা নির্বাচন</Label><Select value={floorId} onValueChange={(v) => { setFloorId(v); setRoomId(""); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId} onValueChange={(v) => { setRoomId(v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>))}</SelectContent></Select></div>
+        </div>
+        <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || !roomId}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
+      </CardContent></Card>
+      {!searched && (<Alert><Search className="size-4" /><AlertDescription>বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন</AlertDescription></Alert>)}
 
-      {/* Search Card */}
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          {/* Building + Room selector */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>বিল্ডিং নির্বাচন</Label>
-              <Select
-                value={buildingId}
-                onValueChange={(v) => {
-                  setBuildingId(v);
-                  setFloorId("");
-                  setRoomId("");
-                  setSearched(false);
-                  setData(null);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="বিল্ডিং বেছে নিন" />
-                </SelectTrigger>
-                <SelectContent>
-                  {buildings.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>রুম নির্বাচন</Label>
-              <Select
-                value={roomId}
-                onValueChange={(v) => {
-                  setRoomId(v);
-                  setSearched(false);
-                  setData(null);
-                }}
-                disabled={!buildingId}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : "রুম বেছে নিন"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {selectedBuilding?.floors
-                    ?.sort((a, b) => a.floorNumber - b.floorNumber)
-                    .map((floor) => (
-                      <SelectGroup key={floor.id}>
-                        <SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">
-                          {floor.floorNumber} তলা
-                        </SelectLabel>
-                        {floor.rooms?.map((room) => (
-                          <SelectItem key={room.id} value={room.id}>
-                            <span className="flex items-center gap-2">
-                              {room.roomNumber}
-                              {room.tenants?.length > 0 && (
-                                <span className="size-2 rounded-full bg-emerald-500 inline-block" />
-                              )}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Search type toggle + Search button */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3">
-            <div className="space-y-1.5 flex-1">
-              <Label>সার্চ টাইপ</Label>
-              <div className="flex gap-2">
-                <Button
-                  variant={searchType === "tenant" ? "default" : "outline"}
-                  className={
-                    searchType === "tenant"
-                      ? "bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 flex-1"
-                      : "gap-1.5 flex-1"
-                  }
-                  onClick={() => setSearchType("tenant")}
-                >
-                  <Users className="size-4" />
-                  ভাড়াটে তালিকা
-                </Button>
-                <Button
-                  variant={searchType === "inventory" ? "default" : "outline"}
-                  className={
-                    searchType === "inventory"
-                      ? "bg-amber-600 hover:bg-amber-700 text-white gap-1.5 flex-1"
-                      : "gap-1.5 flex-1"
-                  }
-                  onClick={() => setSearchType("inventory")}
-                >
-                  <Package className="size-4" />
-                  মালামাল তালিকা
-                </Button>
-              </div>
-            </div>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6"
-              onClick={handleSearch}
-              disabled={searchLoading || !roomId}
-            >
-              {searchLoading ? (
-                <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Search className="size-4" />
-              )}
-              সার্চ করুন
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* No search yet */}
-      {!searched && (
-        <Alert>
-          <Search className="size-4" />
-          <AlertDescription>
-            বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Results */}
       {searched && data && (
-        <div className="space-y-4">
-          {/* Room info banner - context aware */}
-          <div className="bg-white rounded-lg border px-4 py-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center size-8 rounded-lg bg-emerald-100 text-emerald-700">
-                <BedDouble className="size-4" />
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg border px-4 py-3"><div className="flex items-center gap-3"><div className="flex items-center justify-center size-8 rounded-lg bg-emerald-100 text-emerald-700"><BedDouble className="size-4" /></div><div className="flex-1 min-w-0"><p className="font-semibold">রুম: {data.roomNumber}</p><p className="text-xs text-muted-foreground">বর্তমান: {data.currentTenant ? data.currentTenant.name : "কেউ নেই"} &bull; আগে: {data.previousTenants.length} জন &bull; মালামাল: {data.currentInventory.length} টি</p></div></div></div>
+
+          {/* ভাড়াটে তালিকা */}
+          <div>
+            <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2 text-emerald-700"><Users className="size-3.5" /> ভাড়াটে তালিকা</h3>
+            {data.currentTenant ? (
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2.5 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-sm font-bold shrink-0">{data.currentTenant.name.charAt(0)}</div>
+                  <div className="flex-1 min-w-0 grid grid-cols-3 gap-2 text-sm">
+                    <div><span className="text-muted-foreground text-xs">নাম</span><p className="font-medium truncate">{data.currentTenant.name}</p></div>
+                    <div><span className="text-muted-foreground text-xs">ফোন</span><p className="font-medium truncate">{data.currentTenant.phone || "-"}</p></div>
+                    <div><span className="text-muted-foreground text-xs">শুরু</span><p className="font-medium text-xs">{formatDate(data.currentTenant.startDate)}</p></div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditTenantData({ id: data.currentTenant!.id, name: data.currentTenant!.name, phone: data.currentTenant!.phone || "" }); setEditTenantOpen(true); }}><Edit3 className="size-3.5" /></Button>
+                    <Button variant="outline" size="sm" className="gap-1 text-xs text-orange-600 border-orange-300 hover:bg-orange-50 h-7 px-2" onClick={openVacateDialog}>রুম ছেড়ে দিন</Button>
+                  </div>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold">
-                  রুম: {data.roomNumber}
-                </p>
-                {searchType === "tenant" ? (
-                  <p className="text-xs text-muted-foreground">
-                    বর্তমান: {data.currentTenant ? data.currentTenant.name : "কেউ নেই"} &bull;
-                    আগে: {data.previousTenants.length} জন
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    বর্তমান: {data.currentInventory.length} টি &bull;
-                    আগে: {data.previousInventory.length} টি
-                  </p>
-                )}
+            ) : (<p className="text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2 mb-3">এই রুমে বর্তমানে কোনো ভাড়াটে নেই</p>)}
+
+            {data.previousTenants.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2"><span className="text-xs font-semibold text-gray-600">পূর্বের ভাড়াটেগণ</span><Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.previousTenants.length}</Badge></div>
+                <div className="space-y-1.5">
+                  {paginatedPrevTenants.map((tenant) => {
+                    const vacateRecord = data.vacateRecords?.find((vr) => vr.tenantId === tenant.id);
+                    let snapshotItems: VacateInventoryItem[] = [];
+                    try { snapshotItems = vacateRecord ? JSON.parse(vacateRecord.inventorySnapshot) : []; } catch { /* empty */ }
+                    return (
+                      <div key={tenant.id} className="border rounded-lg overflow-hidden">
+                        <div className="flex items-center gap-3 px-3 py-2 bg-white hover:bg-gray-50/50 cursor-pointer" onClick={() => setExpandedPrevTenant(expandedPrevTenant === tenant.id ? null : tenant.id)}>
+                          <div className="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0">{tenant.name.charAt(0)}</div>
+                          <div className="flex-1 min-w-0"><p className="text-sm font-medium truncate">{tenant.name}</p><p className="text-[10px] text-muted-foreground">{formatDate(tenant.startDate)}{tenant.endDate ? ` — ${formatDate(tenant.endDate)}` : ""} • রুম: {data.roomNumber}</p></div>
+                          {expandedPrevTenant === tenant.id ? <ChevronDown className="size-4 text-muted-foreground shrink-0" /> : <ChevronRight className="size-4 text-muted-foreground shrink-0" />}
+                        </div>
+                        {expandedPrevTenant === tenant.id && (
+                          <div className="border-t bg-gray-50/80 px-3 py-2 animate-in slide-in-from-top-1 duration-200">
+                            <div className="grid grid-cols-2 gap-2 text-xs mb-2"><div><span className="text-muted-foreground">ফোন:</span> {tenant.phone || "—"}</div><div><span className="text-muted-foreground">সময়কাল:</span> {formatDate(tenant.startDate)}{tenant.endDate ? ` — ${formatDate(tenant.endDate)}` : ""}</div></div>
+                            {snapshotItems.length > 0 && (<div className="mt-2"><p className="text-xs text-muted-foreground mb-1">চলে যাওয়ার সময়কার মালামাল:</p><div className="border rounded divide-y overflow-hidden">{snapshotItems.map((item, idx) => (<div key={idx} className="flex items-center gap-2 px-2 py-1 text-xs"><span className="flex-1 truncate">{item.itemName}</span><span className="text-muted-foreground">×{item.quantity}</span>{getConditionBadge(item.condition)}</div>))}</div></div>)}
+                            <div className="flex gap-2 mt-2">
+                              <Button variant="outline" size="sm" className="gap-1 h-7 text-[11px] px-2 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); setEditTenantData({ id: tenant.id, name: tenant.name, phone: tenant.phone || "" }); setEditTenantOpen(true); }}><Edit3 className="size-3" />এডিট</Button>
+                              <AlertDialog><AlertDialogTrigger asChild><Button variant="outline" size="sm" className="gap-1 h-7 text-[11px] px-2 text-red-600 border-red-200 hover:bg-red-50" onClick={(e) => e.stopPropagation()}><Trash2 className="size-3" />ডিলিট</Button></AlertDialogTrigger><AlertDialogContent onClick={(e) => e.stopPropagation()}><AlertDialogHeader><AlertDialogTitle>ভাড়াটে মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{tenant.name}&quot; এর সকল তথ্য মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteTenant(tenant.id)}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {totalPrevPages > 1 && (<div className="flex items-center justify-center gap-1 mt-2"><Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={prevPage <= 1} onClick={() => setPrevPage(prevPage - 1)}>আগে</Button>{Array.from({ length: totalPrevPages }, (_, i) => i + 1).map((p) => (<Button key={p} variant={p === prevPage ? "default" : "outline"} size="sm" className="h-7 w-7 text-xs p-0" onClick={() => setPrevPage(p)}>{p}</Button>))}<Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={prevPage >= totalPrevPages} onClick={() => setPrevPage(prevPage + 1)}>পরে</Button></div>)}
               </div>
-            </div>
+            )}
           </div>
 
-          {/* ═══ TENANT SEARCH RESULTS - COMPACT ═══ */}
-          {searchType === "tenant" && (
-            <div className="space-y-4">
-              {/* Current Tenant - compact */}
-              <div>
-                <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2 text-emerald-700">
-                  <Users className="size-3.5" />
-                  বর্তমান ভাড়াটে
-                </h3>
-                {data.currentTenant ? (
-                  <div className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2.5">
-                    <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-sm font-bold shrink-0">
-                      {data.currentTenant.name.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0 grid grid-cols-3 gap-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground text-xs">নাম</span>
-                        <p className="font-medium truncate">{data.currentTenant.name}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">ফোন</span>
-                        <p className="font-medium truncate">{data.currentTenant.phone || "-"}</p>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground text-xs">শুরু</span>
-                        <p className="font-medium text-xs">{formatDate(data.currentTenant.startDate)}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-0.5 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                        onClick={() => {
-                          setEditTenantData({
-                            id: data.currentTenant!.id,
-                            name: data.currentTenant!.name,
-                            phone: data.currentTenant!.phone || "",
-                          });
-                          setEditTenantOpen(true);
-                        }}
-                      >
-                        <Edit3 className="size-3.5" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>ভাড়াটে মুছে ফেলবেন?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              &quot;{data.currentTenant.name}&quot; এর সকল তথ্য স্থায়ীভাবে মুছে যাবে।
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-red-600 hover:bg-red-700 text-white"
-                              onClick={() => handleDeleteTenant(data.currentTenant!.id)}
-                            >
-                              মুছে ফেলুন
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2">এই রুমে বর্তমানে কোনো ভাড়াটে নেই</p>
-                )}
-              </div>
-
-              {/* Previous Tenants - compact list */}
-              <div>
-                <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2 text-gray-600">
-                  <Users className="size-3.5" />
-                  পূর্বের ভাড়াটেগণ
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.previousTenants.length}</Badge>
-                </h3>
-                {data.previousTenants.length === 0 ? (
-                  <p className="text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2">এই রুমে আগে কোনো ভাড়াটে ছিল না</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {data.previousTenants.map((tenant) => (
-                      <div key={tenant.id} className="flex items-center gap-3 border rounded-lg px-3 py-2 bg-white hover:bg-gray-50/50">
-                        <div className="w-7 h-7 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0">
-                          {tenant.name.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0 grid grid-cols-3 gap-2 text-sm">
-                          <div>
-                            <span className="text-muted-foreground text-xs">নাম</span>
-                            <p className="font-medium truncate">{tenant.name}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground text-xs">ফোন</span>
-                            <p className="font-medium truncate">{tenant.phone || "-"}</p>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground text-xs">সময়কাল</span>
-                            <p className="font-medium text-xs">
-                              {formatDate(tenant.startDate)}
-                              {tenant.endDate ? ` — ${formatDate(tenant.endDate)}` : ""}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex gap-0.5 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => {
-                              setEditTenantData({
-                                id: tenant.id,
-                                name: tenant.name,
-                                phone: tenant.phone || "",
-                              });
-                              setEditTenantOpen(true);
-                            }}
-                          >
-                            <Edit3 className="size-3.5" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>ভাড়াটে মুছে ফেলবেন?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  &quot;{tenant.name}&quot; এর সকল তথ্য ও মালামালের রেকর্ড স্থায়ীভাবে মুছে যাবে।
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-red-600 hover:bg-red-700 text-white"
-                                  onClick={() => handleDeleteTenant(tenant.id)}
-                                >
-                                  মুছে ফেলুন
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ═══ INVENTORY SEARCH RESULTS - VERY COMPACT BOXES ═══ */}
-          {searchType === "inventory" && (
-            <div className="space-y-2">
-              {/* Current Inventory - tiny compact rows */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-xs font-semibold flex items-center gap-1 text-emerald-700">
-                    <Package className="size-3" />
-                    বর্তমান মালামাল
-                    <Badge variant="secondary" className="text-[9px] h-3.5 px-1">{data.currentInventory.length}</Badge>
-                  </h3>
-                  <Button
-                    size="sm"
-                    className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-2"
-                    onClick={() => {
-                      setAddInvTarget("current");
-                      setAddInvTenantId(data.currentTenant?.id || "");
-                      setAddInvName("");
-                      setAddInvQty("1");
-                      setAddInvCondition("ভালো");
-                      setAddInvNote("");
-                      setAddInvOpen(true);
-                    }}
-                  >
-                    <Plus className="size-2.5" />
-                    যোগ
-                  </Button>
-                </div>
-                {data.currentInventory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>
-                ) : (
-                  <div className="bg-white border rounded-lg overflow-hidden divide-y">
-                    {data.currentInventory.map((item) => (
-                      <div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group">
-                        <span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span>
-                        <span className="shrink-0">
-                          <Badge variant="outline" className={
-                            item.condition === "ভালো"
-                              ? "border-emerald-300 text-emerald-700 text-[10px] h-4 px-1"
-                              : item.condition === "মাঝারি"
-                                ? "border-yellow-300 text-yellow-700 text-[10px] h-4 px-1"
-                                : item.condition === "নস্ট"
-                                  ? "border-violet-300 text-violet-700 bg-violet-50 text-[10px] h-4 px-1"
-                                  : "border-red-300 text-red-700 text-[10px] h-4 px-1"
-                          }>{item.condition}</Badge>
-                        </span>
-                        <div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}>
-                            <Edit3 className="size-2.5" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50">
-                                <Trash2 className="size-2.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle>
-                                <AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                                <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)}>মুছে ফেলুন</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Previous Inventory - tiny compact rows */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <h3 className="text-xs font-semibold flex items-center gap-1 text-gray-600">
-                    <Package className="size-3" />
-                    পূর্বের মালামাল
-                    <Badge variant="secondary" className="text-[9px] h-3.5 px-1">{data.previousInventory.length}</Badge>
-                  </h3>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 text-[10px] gap-0.5 px-2"
-                    onClick={() => {
-                      setAddInvTarget("previous");
-                      setAddInvTenantId(data.previousTenants.length > 0 ? data.previousTenants[0].id : "");
-                      setAddInvName("");
-                      setAddInvQty("1");
-                      setAddInvCondition("ভালো");
-                      setAddInvNote("");
-                      setAddInvOpen(true);
-                    }}
-                  >
-                    <Plus className="size-2.5" />
-                    যোগ
-                  </Button>
-                </div>
-                {data.previousInventory.length === 0 ? (
-                  <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">আগে কোনো মালামালের রেকর্ড নেই</p>
-                ) : (
-                  <div className="bg-white border rounded-lg overflow-hidden divide-y opacity-80">
-                    {data.previousInventory.map((item) => (
-                      <div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group">
-                        <span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span>
-                        <span className="shrink-0">
-                          <Badge variant="outline" className={
-                            item.condition === "ভালো"
-                              ? "border-emerald-300 text-emerald-700 text-[10px] h-4 px-1"
-                              : item.condition === "মাঝারি"
-                                ? "border-yellow-300 text-yellow-700 text-[10px] h-4 px-1"
-                                : item.condition === "নস্ট"
-                                  ? "border-violet-300 text-violet-700 bg-violet-50 text-[10px] h-4 px-1"
-                                  : "border-red-300 text-red-700 text-[10px] h-4 px-1"
-                          }>{item.condition}</Badge>
-                        </span>
-                        {item.tenantName && <span className="text-[10px] text-muted-foreground truncate max-w-16 hidden sm:inline">— {item.tenantName}</span>}
-                        <div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}>
-                            <Edit3 className="size-2.5" />
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50">
-                                <Trash2 className="size-2.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle>
-                                <AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                                <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)}>মুছে ফেলুন</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* মালামাল তালিকা */}
+          <div>
+            <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Package className="size-3.5" /> মালামাল তালিকা<Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.currentInventory.length}</Badge></h3><Button size="sm" className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-2" onClick={() => { setAddInvTenantId(data.currentTenant?.id || ""); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(true); }}><Plus className="size-2.5" />যোগ</Button></div>
+            {data.currentInventory.length === 0 ? (<p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>) : (<div className="bg-white border rounded-lg overflow-hidden divide-y">{data.currentInventory.map((item) => (<div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group"><span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span><span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span><div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}><Edit3 className="size-2.5" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="size-2.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></div>))}</div>)}
+          </div>
         </div>
       )}
 
-      {/* ═══ Edit Tenant Dialog ═══ */}
-      <Dialog open={editTenantOpen} onOpenChange={setEditTenantOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>ভাড়াটে তথ্য সম্পাদনা</DialogTitle>
-          </DialogHeader>
-          {editTenantData && (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>নাম</Label>
-                <Input
-                  value={editTenantData.name}
-                  onChange={(e) =>
-                    setEditTenantData({
-                      ...editTenantData,
-                      name: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>ফোন নম্বর</Label>
-                <Input
-                  value={editTenantData.phone}
-                  onChange={(e) =>
-                    setEditTenantData({
-                      ...editTenantData,
-                      phone: e.target.value,
-                    })
-                  }
-                  placeholder="০১XXXXXXXXX"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditTenantOpen(false);
-                setEditTenantData(null);
-              }}
-            >
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleEditTenant}
-            >
-              আপডেট করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Dialogs */}
+      <Dialog open={editTenantOpen} onOpenChange={setEditTenantOpen}><DialogContent><DialogHeader><DialogTitle>ভাড়াটে তথ্য সম্পাদনা</DialogTitle></DialogHeader>{editTenantData && (<div className="space-y-4"><div className="space-y-1.5"><Label>নাম</Label><Input value={editTenantData.name} onChange={(e) => setEditTenantData({ ...editTenantData, name: e.target.value })} /></div><div className="space-y-1.5"><Label>ফোন নম্বর</Label><Input value={editTenantData.phone} onChange={(e) => setEditTenantData({ ...editTenantData, phone: e.target.value })} placeholder="০১XXXXXXXXX" /></div></div>)}<DialogFooter><Button variant="outline" onClick={() => { setEditTenantOpen(false); setEditTenantData(null); }}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleEditTenant}>আপডেট করুন</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={editInvOpen} onOpenChange={setEditInvOpen}><DialogContent><DialogHeader><DialogTitle>মালামাল সম্পাদনা</DialogTitle></DialogHeader>{editInvItem && (<div className="space-y-4"><div className="space-y-1.5"><Label>মালামালের নাম</Label><Input value={editInvItem.itemName} onChange={(e) => setEditInvItem({ ...editInvItem, itemName: e.target.value })} /></div><div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>পরিমাণ</Label><Input type="number" min={1} value={editInvItem.quantity} onChange={(e) => setEditInvItem({ ...editInvItem, quantity: parseInt(e.target.value) || 1 })} /></div><div className="space-y-1.5"><Label>অবস্থা</Label><Select value={editInvItem.condition} onValueChange={(v) => setEditInvItem({ ...editInvItem, condition: v })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div></div><div className="space-y-1.5"><Label>নোট</Label><Textarea value={editInvItem.note || ""} onChange={(e) => setEditInvItem({ ...editInvItem, note: e.target.value })} rows={2} /></div></div>)}<DialogFooter><Button variant="outline" onClick={() => { setEditInvOpen(false); setEditInvItem(null); }}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleEditInventory}>আপডেট করুন</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={addInvOpen} onOpenChange={setAddInvOpen}><DialogContent><DialogHeader><DialogTitle>নতুন মালামাল যোগ করুন</DialogTitle><DialogDescription>রুম {data?.roomNumber} এ নতুন মালামাল যোগ করুন</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-1.5"><Label>মালামালের নাম *</Label><Input placeholder="যেমন: ফ্যান" value={addInvName} onChange={(e) => setAddInvName(e.target.value)} /></div><div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>পরিমাণ</Label><Input type="number" min={1} value={addInvQty} onChange={(e) => setAddInvQty(e.target.value)} /></div><div className="space-y-1.5"><Label>অবস্থা</Label><Select value={addInvCondition} onValueChange={setAddInvCondition}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div></div><div className="space-y-1.5"><Label>নোট (ঐচ্ছিক)</Label><Textarea placeholder="কোনো বিশেষ নোট" value={addInvNote} onChange={(e) => setAddInvNote(e.target.value)} rows={2} /></div></div><DialogFooter><Button variant="outline" onClick={() => setAddInvOpen(false)}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAddInventory}>যোগ করুন</Button></DialogFooter></DialogContent></Dialog>
 
-      {/* ═══ Edit Inventory Dialog ═══ */}
-      <Dialog open={editInvOpen} onOpenChange={setEditInvOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>মালামাল সম্পাদনা</DialogTitle>
-          </DialogHeader>
-          {editInvItem && (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>মালামালের নাম</Label>
-                <Input
-                  value={editInvItem.itemName}
-                  onChange={(e) =>
-                    setEditInvItem({
-                      ...editInvItem,
-                      itemName: e.target.value,
-                    })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>পরিমাণ</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={editInvItem.quantity}
-                    onChange={(e) =>
-                      setEditInvItem({
-                        ...editInvItem,
-                        quantity: parseInt(e.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>অবস্থা</Label>
-                  <Select
-                    value={editInvItem.condition}
-                    onValueChange={(v) =>
-                      setEditInvItem({ ...editInvItem, condition: v })
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ভালো">ভালো</SelectItem>
-                      <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                      <SelectItem value="খারাপ">খারাপ</SelectItem>
-                      <SelectItem value="নস্ট">নস্ট</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>নোট</Label>
-                <Textarea
-                  value={editInvItem.note || ""}
-                  onChange={(e) =>
-                    setEditInvItem({ ...editInvItem, note: e.target.value })
-                  }
-                  rows={2}
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEditInvOpen(false);
-                setEditInvItem(null);
-              }}
-            >
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleEditInventory}
-            >
-              আপডেট করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══ Add Inventory Dialog ═══ */}
-      <Dialog open={addInvOpen} onOpenChange={setAddInvOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>নতুন মালামাল যোগ করুন</DialogTitle>
-            <DialogDescription>
-              রুম {data?.roomNumber} এ নতুন মালামাল যোগ করুন
-              {addInvTarget === "current" && data?.currentTenant && (
-                <span className="block text-xs mt-1 text-emerald-600">
-                  ভাড়াটে: {data.currentTenant.name}
-                </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>মালামালের নাম *</Label>
-              <Input
-                placeholder="যেমন: ফ্যান"
-                value={addInvName}
-                onChange={(e) => setAddInvName(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>পরিমাণ</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={addInvQty}
-                  onChange={(e) => setAddInvQty(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>অবস্থা</Label>
-                <Select
-                  value={addInvCondition}
-                  onValueChange={setAddInvCondition}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ভালো">ভালো</SelectItem>
-                    <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                    <SelectItem value="খারাপ">খারাপ</SelectItem>
-                    <SelectItem value="নস্ট">নস্ট</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>নোট (ঐচ্ছিক)</Label>
-              <Textarea
-                placeholder="কোনো বিশেষ নোট"
-                value={addInvNote}
-                onChange={(e) => setAddInvNote(e.target.value)}
-                rows={2}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddInvOpen(false)}>
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleAddInventory}
-            >
-              যোগ করুন
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Vacate Dialog */}
+      <Dialog open={vacateOpen} onOpenChange={setVacateOpen}><DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>ভাড়াটে রুম ছেড়ে দিন</DialogTitle><DialogDescription>{data?.currentTenant?.name} রুম ছেড়ে দিচ্ছেন। মালামালের অবস্থা যাচাই করুন।</DialogDescription></DialogHeader><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">রুম নম্বর</p><p className="font-semibold">{data?.roomNumber}</p></div><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">ভাড়াটে</p><p className="font-semibold">{data?.currentTenant?.name}</p></div></div><div><div className="flex items-center justify-between mb-2"><Label>মালামালের তালিকা</Label><Button variant="outline" size="sm" className="gap-1 text-xs" onClick={addVacateItem}><Plus className="size-3" />আইটেম যোগ</Button></div><div className="space-y-2 max-h-72 overflow-y-auto">{vacateItems.map((item, idx) => (<div key={idx} className="grid grid-cols-[1fr_70px_100px_100px_32px] gap-2 items-end bg-gray-50 rounded-lg p-2"><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">নাম</span>}<Input className="h-8 text-xs" value={item.itemName} onChange={(e) => updateVacateItem(idx, "itemName", e.target.value)} placeholder="মালামালের নাম" /></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">পরিমাণ</span>}<Input className="h-8 text-xs" type="number" min={1} value={item.quantity} onChange={(e) => updateVacateItem(idx, "quantity", parseInt(e.target.value) || 1)} /></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">অবস্থা</span>}<Select value={item.condition} onValueChange={(v) => updateVacateItem(idx, "condition", v)}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">নোট</span>}<Input className="h-8 text-xs" value={item.note || ""} onChange={(e) => updateVacateItem(idx, "note", e.target.value)} placeholder="নোট" /></div><Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0" onClick={() => removeVacateItem(idx)} disabled={vacateItems.length <= 1}><X className="size-3.5" /></Button></div>))}</div></div></div><DialogFooter><Button variant="outline" onClick={() => setVacateOpen(false)}>বাতিল</Button><Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleVacate} disabled={vacateLoading}>{vacateLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : null}নিশ্চিত করুন — রুম ছেড়ে দিন</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }

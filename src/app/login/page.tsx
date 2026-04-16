@@ -54,8 +54,13 @@ export default function LoginPage() {
     fetch("/api/auth/me")
       .then((r) => {
         if (r.ok) {
-          router.push("/");
-          return null;
+          return r.json().then((data) => {
+            if (data.needsSetup) {
+              setViewMode("setup");
+            } else {
+              router.push("/");
+            }
+          });
         }
         // Not authenticated, check if setup needed
         return fetch("/api/auth/init");
@@ -96,7 +101,12 @@ export default function LoginPage() {
         return;
       }
       toast.success("সফলভাবে লগইন হয়েছে");
-      router.push("/");
+      if (data.needsSetup) {
+        // Redirect to setup
+        router.push("/setup");
+      } else {
+        router.push("/");
+      }
     } catch {
       toast.error("লগইন করতে সমস্যা হয়েছে");
     } finally {
@@ -104,7 +114,7 @@ export default function LoginPage() {
     }
   };
 
-  // ── Setup Handler ──
+  // ── Setup Handler (first time) ──
   const handleSetup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -224,39 +234,6 @@ export default function LoginPage() {
     );
   }
 
-  // ── Password Input with toggle ──
-  const PasswordInput = ({
-    value,
-    onChange,
-    show,
-    onToggleShow,
-    placeholder,
-  }: {
-    value: string;
-    onChange: (v: string) => void;
-    show: boolean;
-    onToggleShow: () => void;
-    placeholder?: string;
-  }) => (
-    <div className="relative">
-      <Input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder || "পাসওয়ার্ড"}
-        className="pr-10"
-      />
-      <button
-        type="button"
-        onClick={onToggleShow}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-        tabIndex={-1}
-      >
-        {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </button>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50/30 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -266,14 +243,14 @@ export default function LoginPage() {
             <Building2 className="size-7" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">
-            অফিস আবাসিক ম্যানেজমেন্ট
+            আবাসিক ম্যানেজমেন্ট
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             আবাসিক এলাকার সামগ্রিক পরিচালনা ব্যবস্থা
           </p>
         </div>
 
-        {/* ═══ SETUP MODE ═══ */}
+        {/* ═══ SETUP MODE (first time - no user exists) ═══ */}
         {viewMode === "setup" && (
           <Card>
             <CardHeader className="text-center pb-2">
@@ -454,7 +431,7 @@ export default function LoginPage() {
           </Card>
         )}
 
-        {/* ═══ RECOVERY STEP 1: Enter username ═══ */}
+        {/* ═══ RECOVERY STEP 1 ═══ */}
         {viewMode === "recover-step1" && (
           <Card>
             <CardHeader className="text-center pb-2">
@@ -494,13 +471,9 @@ export default function LoginPage() {
                   পরবর্তী ধাপ
                 </Button>
               </form>
-
               <div className="mt-4 pt-3 border-t text-center">
                 <button
-                  onClick={() => {
-                    setViewMode("login");
-                    setRecoverUsername("");
-                  }}
+                  onClick={() => { setViewMode("login"); setRecoverUsername(""); }}
                   className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
                 >
                   <ArrowLeft className="size-3.5" />
@@ -511,7 +484,7 @@ export default function LoginPage() {
           </Card>
         )}
 
-        {/* ═══ RECOVERY STEP 2: Answer question + new password ═══ */}
+        {/* ═══ RECOVERY STEP 2 ═══ */}
         {viewMode === "recover-step2" && (
           <Card>
             <CardHeader className="text-center pb-2">
@@ -523,19 +496,12 @@ export default function LoginPage() {
             <CardContent>
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                 <p className="text-xs text-amber-600 font-medium mb-1">নিরাপত্তা প্রশ্ন:</p>
-                <p className="text-sm font-semibold text-amber-900">
-                  {securityQuestion}
-                </p>
+                <p className="text-sm font-semibold text-amber-900">{securityQuestion}</p>
               </div>
               <form onSubmit={handleRecoverStep2} className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>আপনার উত্তর</Label>
-                  <Input
-                    placeholder="নিরাপত্তা প্রশ্নের উত্তর লিখুন"
-                    value={securityAnswer}
-                    onChange={(e) => setSecurityAnswer(e.target.value)}
-                    autoFocus
-                  />
+                  <Input placeholder="নিরাপত্তা প্রশ্নের উত্তর লিখুন" value={securityAnswer} onChange={(e) => setSecurityAnswer(e.target.value)} autoFocus />
                 </div>
                 <div className="space-y-1.5">
                   <Label>নতুন পাসওয়ার্ড</Label>
@@ -558,29 +524,13 @@ export default function LoginPage() {
                     </button>
                   </div>
                 </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
-                  disabled={recoverLoading}
-                >
-                  {recoverLoading ? (
-                    <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <ShieldCheck className="size-4" />
-                  )}
+                <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2" disabled={recoverLoading}>
+                  {recoverLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<ShieldCheck className="size-4" />)}
                   পাসওয়ার্ড পরিবর্তন করুন
                 </Button>
               </form>
-
               <div className="mt-4 pt-3 border-t text-center">
-                <button
-                  onClick={() => {
-                    setViewMode("login");
-                    setSecurityAnswer("");
-                    setNewPassword("");
-                  }}
-                  className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
-                >
+                <button onClick={() => { setViewMode("login"); setSecurityAnswer(""); setNewPassword(""); }} className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5">
                   <ArrowLeft className="size-3.5" />
                   লগইনে ফিরে যান
                 </button>
@@ -590,7 +540,7 @@ export default function LoginPage() {
         )}
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          অফিস আবাসিক ম্যানেজমেন্ট সিস্টেম &copy; {new Date().getFullYear()}
+          আবাসিক ম্যানেজমেন্ট &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>
