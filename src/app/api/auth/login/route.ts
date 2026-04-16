@@ -50,8 +50,6 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('[LOGIN ERROR]', msg);
-    return NextResponse.json({ error: 'লগইন করতে সমস্যা হয়েছে', debug: msg }, { status: 500 });
+    return NextResponse.json({ error: 'লগইন করতে সমস্যা হয়েছে' }, { status: 500 });
   }
 }

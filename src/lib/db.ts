@@ -10,17 +10,17 @@ function createPrismaClient(): PrismaClient {
 
   if (databaseUrl.startsWith('libsql://')) {
     try {
-      // Pass config object (not pre-created client) to adapter
       const adapter = new PrismaLibSQL({ url: databaseUrl })
       return new PrismaClient({
         adapter,
         log: ['error'],
       })
     } catch (err) {
-      console.warn('[db] Turso adapter failed, using SQLite:', err)
+      console.warn('[db] Turso adapter failed, using SQLite fallback')
     }
   }
 
+  // Local SQLite fallback
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })

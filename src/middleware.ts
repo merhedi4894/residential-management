@@ -5,7 +5,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow these paths without authentication
-  const allowedPaths = ['/login', '/api/auth', '/api/debug'];
+  const allowedPaths = ['/login', '/api/auth'];
   if (
     allowedPaths.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith('/_next') ||
