@@ -15,12 +15,10 @@ function createPrismaClient(): PrismaClient {
       const adapter = new PrismaLibSQL(libsql)
       return new PrismaClient({
         adapter,
-        // Override datasource URL to prevent Prisma from reading env var
-        datasourceUrl: 'file:/tmp/dummy.db',
         log: ['error'],
       })
     } catch (err) {
-      console.warn('[db] Turso adapter failed:', err)
+      console.warn('[db] Turso adapter failed, using SQLite:', err)
     }
   }
 

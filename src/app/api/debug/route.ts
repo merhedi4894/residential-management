@@ -4,30 +4,27 @@ export async function GET() {
   try {
     const databaseUrl = process.env.DATABASE_URL || '';
     
-    // Test 1: Direct libsql
+    // Direct libsql test
     const { createClient } = await import('@libsql/client');
     const client = createClient({ url: databaseUrl });
-    const result = await client.execute('SELECT 1 as test');
+    const directResult = await client.execute('SELECT 1 as test');
     
-    // Test 2: Prisma with adapter + datasourceUrl override
+    // Prisma adapter test (no datasourceUrl)
     const { PrismaLibSQL } = await import('@prisma/adapter-libsql');
     const { PrismaClient } = await import('@prisma/client');
     const libsql = createClient({ url: databaseUrl });
     const adapter = new PrismaLibSQL(libsql);
-    const prisma = new PrismaClient({ 
-      adapter,
-      datasourceUrl: 'file:/tmp/dummy.db',
-    });
+    const prisma = new PrismaClient({ adapter });
     const userCount = await prisma.user.count();
     await prisma.$disconnect();
     
     return NextResponse.json({
-      directLibsql: result.rows,
+      directLibsql: directResult.rows,
       prismaUserCount: userCount,
-      dbUrl: databaseUrl.substring(0, 40) + '...',
+      success: true,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg.substring(0, 500) }, { status: 500 });
+    const msg = err instanceof Error ? err.message.substring(0, 500) : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
