@@ -146,7 +146,13 @@ export default function LoginPage() {
           securityAnswer: setupSecurityAnswer.trim(),
         }),
       });
-      const data = await res.json();
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch {
+        toast.error("সার্ভার ত্রুটি হয়েছে। আবার চেষ্টা করুন।");
+        return;
+      }
       if (!res.ok) {
         toast.error(data.error || "সেটআপ ব্যর্থ হয়েছে");
         return;
@@ -154,8 +160,9 @@ export default function LoginPage() {
       toast.success("এডমিন অ্যাকাউন্ট তৈরি হয়েছে! এখন লগইন করুন");
       setViewMode("login");
       setUsername(setupUsername.trim());
-    } catch {
-      toast.error("অ্যাকাউন্ট তৈরি করতে সমস্যা হয়েছে");
+    } catch (err: any) {
+      console.error("Setup error:", err?.message || err);
+      toast.error("অ্যাকাউন্ট তৈরি করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     } finally {
       setSetupLoading(false);
     }
