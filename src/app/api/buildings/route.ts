@@ -11,8 +11,6 @@ export async function GET() {
             rooms: {
               include: {
                 tenants: { where: { isActive: true } },
-                inventories: { orderBy: { addedDate: 'desc' } },
-                troubleReports: { orderBy: { reportedAt: 'desc' } },
               },
             },
           },

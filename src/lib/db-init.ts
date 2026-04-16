@@ -3,6 +3,7 @@
 // This is needed because Prisma can't create tables at runtime
 
 import { createClient, Client } from '@libsql/client';
+import bcrypt from 'bcryptjs';
 
 let _client: Client | null = null;
 
@@ -162,5 +163,33 @@ export async function ensureTablesExist(): Promise<boolean> {
   } catch (err: any) {
     console.error('[db-init] Failed to create tables:', err?.message || err);
     return false;
+  }
+}
+
+export async function updateSecurityQuestion(): Promise<void> {
+  const client = getLibsqlClient();
+  if (!client) return;
+
+  try {
+    // Only update if the current security question is different
+    const result = await client.execute({
+      sql: `SELECT "securityQuestion" FROM "User" LIMIT 1`,
+    });
+
+    if (result.rows.length === 0) return;
+    const currentQuestion = result.rows[0]['securityQuestion'] as string;
+    if (currentQuestion === 'What was your birth place?') return;
+
+    const hashedAnswer = await bcrypt.hash('bhatsala', 10);
+    const newQuestion = 'What was your birth place?';
+
+    await client.execute({
+      sql: `UPDATE "User" SET "securityQuestion" = ?, "securityAnswer" = ?, "updatedAt" = datetime('now') WHERE "securityQuestion" != ?`,
+      args: [newQuestion, hashedAnswer, newQuestion],
+    });
+
+    console.log('[db-init] Security question updated successfully');
+  } catch (err: any) {
+    console.error('[db-init] Failed to update security question:', err?.message || err);
   }
 }

@@ -209,12 +209,21 @@ function getStatusBadge(status: string) {
 
 const uid = () => Math.random().toString(36).substring(2, 9);
 
+// Bengali months for search filters (shared between TenantsTab and TroublesTab)
+const BENGALI_MONTHS = [
+  { value: "1", label: "জানুয়ারি" }, { value: "2", label: "ফেব্রুয়ারি" }, { value: "3", label: "মার্চ" },
+  { value: "4", label: "এপ্রিল" }, { value: "5", label: "মে" }, { value: "6", label: "জুন" },
+  { value: "7", label: "জুলাই" }, { value: "8", label: "আগস্ট" }, { value: "9", label: "সেপ্টেম্বর" },
+  { value: "10", label: "অক্টোবর" }, { value: "11", label: "নভেম্বর" }, { value: "12", label: "ডিসেম্বর" },
+];
+
 // ── Buildings Context (shared data for performance) ─────────────────────
 
 const BuildingsContext = React.createContext<{
   buildings: Building[];
   reloadBuildings: () => void;
-}>({ buildings: [], reloadBuildings: () => {} });
+  counts: { buildingCount: number; roomCount: number; tenantCount: number };
+}>({ buildings: [], reloadBuildings: () => {}, counts: { buildingCount: 0, roomCount: 0, tenantCount: 0 } });
 
 function useBuildingsContext() {
   return React.useContext(BuildingsContext);
@@ -222,6 +231,7 @@ function useBuildingsContext() {
 
 function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
   const [buildings, setBuildings] = useState<Building[]>([]);
+  const [counts, setCounts] = useState({ buildingCount: 0, roomCount: 0, tenantCount: 0 });
 
   const loadBuildings = useCallback(async () => {
     try {
@@ -232,15 +242,25 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
     } catch { /* silent */ }
   }, []);
 
+  const loadCounts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/counts");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setCounts(data);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     loadBuildings();
-    const handler = () => loadBuildings();
+    loadCounts();
+    const handler = () => { loadBuildings(); loadCounts(); };
     window.addEventListener("dashboard-data-changed", handler);
     return () => window.removeEventListener("dashboard-data-changed", handler);
-  }, [loadBuildings]);
+  }, [loadBuildings, loadCounts]);
 
   return (
-    <BuildingsContext.Provider value={{ buildings, reloadBuildings: loadBuildings }}>
+    <BuildingsContext.Provider value={{ buildings, reloadBuildings: loadBuildings, counts }}>
       {children}
     </BuildingsContext.Provider>
   );
@@ -409,21 +429,7 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
   onLogout: () => void;
   onChangePassword: () => void;
 }) {
-  const { buildings } = useBuildingsContext();
-
-  const { totalRooms, activeTenants } = React.useMemo(() => {
-    let rooms = 0;
-    let tenants = 0;
-    buildings.forEach((b) => {
-      b.floors?.forEach((f) => {
-        rooms += f.rooms?.length || 0;
-        f.rooms?.forEach((r) => {
-          tenants += r.tenants?.length || 0;
-        });
-      });
-    });
-    return { totalRooms: rooms, activeTenants: tenants };
-  }, [buildings]);
+  const { counts } = useBuildingsContext();
 
   return (
     <header className="mb-8">
@@ -443,21 +449,21 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
             <Building2 className="size-4 text-emerald-600" />
             <span className="text-sm text-muted-foreground">বিল্ডিং</span>
             <span className="text-lg font-bold text-emerald-700">
-              {buildings.length}
+              {counts.buildingCount}
             </span>
           </div>
           <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
             <BedDouble className="size-4 text-emerald-600" />
             <span className="text-sm text-muted-foreground">রুম</span>
             <span className="text-lg font-bold text-emerald-700">
-              {totalRooms}
+              {counts.roomCount}
             </span>
           </div>
           <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
             <Users className="size-4 text-emerald-600" />
             <span className="text-sm text-muted-foreground">ভাড়াটে</span>
             <span className="text-lg font-bold text-emerald-700">
-              {activeTenants}
+              {counts.tenantCount}
             </span>
           </div>
           {/* User menu */}
@@ -498,8 +504,16 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
 // ── Main Tabs ────────────────────────────────────────────────────────────
 
 function MainTabs() {
+  const [activeTab, setActiveTab] = useState("buildings");
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["buildings"]));
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setVisitedTabs(prev => new Set([...prev, value]));
+  };
+
   return (
-    <Tabs defaultValue="buildings" className="w-full">
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
       <TabsList className="w-full sm:w-auto flex flex-wrap h-auto gap-1 p-1">
         <TabsTrigger value="buildings" className="flex-1 sm:flex-auto gap-1.5">
           <Building2 className="size-4" />
@@ -527,13 +541,13 @@ function MainTabs() {
         <BuildingsTab />
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        <TenantsTab />
+        {visitedTabs.has("tenants") && <TenantsTab />}
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        <OverviewTab />
+        {visitedTabs.has("overview") && <OverviewTab />}
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        <TroublesTab />
+        {visitedTabs.has("troubles") && <TroublesTab />}
       </TabsContent>
     </Tabs>
   );
@@ -950,6 +964,13 @@ function TenantsTab() {
   const [loading, setLoading] = useState(true);
   const [showGuestView, setShowGuestView] = useState(false);
 
+  // Month/Year search filter
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [tenantPage, setTenantPage] = useState(1);
+  const TENANT_PAGE_SIZE = 10;
+
   // Add tenant dialog
   const [addOpen, setAddOpen] = useState(false);
   const [tName, setTName] = useState("");
@@ -962,19 +983,27 @@ function TenantsTab() {
   const [invItems, setInvItems] = useState<
     { itemName: string; quantity: string; condition: string }[]
   >([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+  const [editingInvIdx, setEditingInvIdx] = useState<number | null>(null);
   const [previousTenantName, setPreviousTenantName] = useState("");
   const [loadingPrevItems, setLoadingPrevItems] = useState(false);
 
   // Vacate dialog
   const [vacateOpen, setVacateOpen] = useState(false);
   const [vacateTenant, setVacateTenant] = useState<Tenant | null>(null);
+  const [vacateItems, setVacateItems] = useState<VacateInventoryItem[]>([]);
+  const [vacateLoading, setVacateLoading] = useState(false);
+  const [editingVacateIdx, setEditingVacateIdx] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const tRes = await fetch("/api/tenants");
       if (!tRes.ok) throw new Error();
-      setTenants(await tRes.json());
+      const data = await tRes.json();
+      setTenants(data);
+      const yearSet = new Set<number>();
+      data.forEach((t: Tenant) => yearSet.add(new Date(t.startDate).getFullYear()));
+      setAvailableYears([...yearSet].sort((a, b) => b - a));
       window.dispatchEvent(new Event("dashboard-data-changed"));
     } catch {
       toast.error("তথ্য লোড করতে সমস্যা হয়েছে");
@@ -1096,20 +1125,56 @@ function TenantsTab() {
   const handleVacate = async () => {
     if (!vacateTenant) return;
     try {
-      const res = await fetch("/api/tenants", {
-        method: "PATCH",
+      setVacateLoading(true);
+      const res = await fetch("/api/vacate", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: vacateTenant.id }),
+        body: JSON.stringify({
+          tenantId: vacateTenant.id,
+          inventoryItems: vacateItems.filter((item) => item.itemName.trim() || item.id),
+        }),
       });
       if (!res.ok) throw new Error();
       toast.success("ভাড়াটে রুম ছেড়ে দিয়েছেন");
       setVacateOpen(false);
       setVacateTenant(null);
       loadData();
+      window.dispatchEvent(new Event("dashboard-data-changed"));
     } catch {
       toast.error("আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setVacateLoading(false);
     }
   };
+
+  // Vacate inventory helpers
+  const updateVacateItem = (idx: number, field: keyof VacateInventoryItem, value: string | number) => {
+    setVacateItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+  };
+  const removeVacateItem = (idx: number) => {
+    if (vacateItems.length <= 1) return;
+    setVacateItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const addVacateItem = () => {
+    setVacateItems((prev) => [...prev, { itemName: "", quantity: 1, condition: "ভালো" }]);
+  };
+
+  // Filter tenants by month/year
+  const filteredTenants = React.useMemo(() => {
+    if (!filterMonth && !filterYear) return tenants;
+    return tenants.filter((t) => {
+      const d = new Date(t.startDate);
+      const mOk = !filterMonth || d.getMonth() + 1 === parseInt(filterMonth);
+      const yOk = !filterYear || d.getFullYear() === parseInt(filterYear);
+      return mOk && yOk;
+    });
+  }, [tenants, filterMonth, filterYear]);
+
+  const totalTenantPages = Math.max(1, Math.ceil(filteredTenants.length / TENANT_PAGE_SIZE));
+  const paginatedTenants = filteredTenants.slice((tenantPage - 1) * TENANT_PAGE_SIZE, tenantPage * TENANT_PAGE_SIZE);
+
+  // Reset page on filter change
+  useEffect(() => { setTenantPage(1); }, [filterMonth, filterYear]);
 
   if (loading) {
     return (
@@ -1314,68 +1379,130 @@ function TenantsTab() {
                   {invItems.map((item, idx) => (
                     <div
                       key={idx}
-                      className="grid grid-cols-[1fr_80px_100px_32px] gap-2 items-end"
+                      className={`grid gap-2 items-end ${editingInvIdx === idx ? "grid-cols-[1fr_80px_100px_32px_32px]" : "grid-cols-[1fr_80px_100px_32px_32px]"}`}
                     >
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            মালামালের নাম
-                          </span>
-                        )}
-                        <Input
-                          placeholder="নাম"
-                          value={item.itemName}
-                          onChange={(e) =>
-                            updateInvRow(idx, "itemName", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            পরিমাণ
-                          </span>
-                        )}
-                        <Input
-                          placeholder="১"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateInvRow(idx, "quantity", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            অবস্থা
-                          </span>
-                        )}
-                        <Select
-                          value={item.condition}
-                          onValueChange={(v) =>
-                            updateInvRow(idx, "condition", v)
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ভালো">ভালো</SelectItem>
-                            <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                            <SelectItem value="খারাপ">খারাপ</SelectItem>
-                            <SelectItem value="নস্ট">নস্ট</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0"
-                        onClick={() => removeInvRow(idx)}
-                        disabled={invItems.length <= 1}
-                      >
-                        <X className="size-4" />
-                      </Button>
+                      {editingInvIdx === idx ? (
+                        <>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                মালামালের নাম
+                              </span>
+                            )}
+                            <Input
+                              placeholder="নাম"
+                              value={item.itemName}
+                              onChange={(e) =>
+                                updateInvRow(idx, "itemName", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                পরিমাণ
+                              </span>
+                            )}
+                            <Input
+                              placeholder="১"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                updateInvRow(idx, "quantity", e.target.value)
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                অবস্থা
+                              </span>
+                            )}
+                            <Select
+                              value={item.condition}
+                              onValueChange={(v) =>
+                                updateInvRow(idx, "condition", v)
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ভালো">ভালো</SelectItem>
+                                <SelectItem value="মাঝারি">মাঝারি</SelectItem>
+                                <SelectItem value="খারাপ">খারাপ</SelectItem>
+                                <SelectItem value="নস্ট">নস্ট</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 size-8 p-0"
+                            onClick={() => setEditingInvIdx(null)}
+                          >
+                            <Edit3 className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0"
+                            onClick={() => removeInvRow(idx)}
+                            disabled={invItems.length <= 1}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                মালামালের নাম
+                              </span>
+                            )}
+                            <div className="flex items-center h-9 px-3 rounded-md border bg-white text-sm">
+                              {item.itemName || <span className="text-muted-foreground">নাম</span>}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                পরিমাণ
+                              </span>
+                            )}
+                            <div className="flex items-center h-9 px-3 rounded-md border bg-white text-sm">
+                              {item.quantity}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            {idx === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                অবস্থা
+                              </span>
+                            )}
+                            <div className="flex items-center h-9 px-3 rounded-md border bg-white">
+                              {getConditionBadge(item.condition)}
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 size-8 p-0"
+                            onClick={() => setEditingInvIdx(idx)}
+                          >
+                            <Edit3 className="size-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0"
+                            onClick={() => removeInvRow(idx)}
+                            disabled={invItems.length <= 1}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1410,7 +1537,31 @@ function TenantsTab() {
         <GuestsTab />
       ) : (
         <>
-      {tenants.length === 0 && (
+      {/* Search filters */}
+      <Card><CardContent className="p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Search className="size-4 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground">সার্চ:</span>
+          <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="মাস বেছে নিন" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">সব মাস</SelectItem>
+              {BENGALI_MONTHS.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          <Select value={filterYear || "__all"} onValueChange={(v) => setFilterYear(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-[100px] h-8 text-xs"><SelectValue placeholder="বছর" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">সব বছর</SelectItem>
+              {availableYears.map((y) => (<SelectItem key={y} value={String(y)}>{toBanglaNumber(y)}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          {(filterMonth || filterYear) && (<Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterMonth(""); setFilterYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>)}
+          <span className="text-xs text-muted-foreground ml-auto">মোট: {filteredTenants.length} জন</span>
+        </div>
+      </CardContent></Card>
+
+      {filteredTenants.length === 0 && !loading && (
         <Alert>
           <Users className="size-4" />
           <AlertDescription>
@@ -1434,7 +1585,7 @@ function TenantsTab() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {tenants.map((tenant) => (
+              {paginatedTenants.map((tenant) => (
                 <TableRow key={tenant.id}>
                   <TableCell className="font-medium">{tenant.name}</TableCell>
                   <TableCell>{tenant.room?.roomNumber}</TableCell>
@@ -1455,8 +1606,30 @@ function TenantsTab() {
                         variant="outline"
                         size="sm"
                         className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
-                        onClick={() => {
+                        onClick={async () => {
                           setVacateTenant(tenant);
+                          try {
+                            const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
+                            if (res.ok) {
+                              const items = await res.json();
+                              if (Array.isArray(items) && items.length > 0) {
+                                setVacateItems(items.map((inv: any) => ({
+                                  id: inv.id,
+                                  itemName: inv.itemName,
+                                  quantity: inv.quantity,
+                                  condition: inv.condition,
+                                  note: inv.note,
+                                })));
+                              } else {
+                                setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                              }
+                            } else {
+                              setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                            }
+                          } catch {
+                            setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                          }
+                          setEditingVacateIdx(null);
                           setVacateOpen(true);
                         }}
                       >
@@ -1473,7 +1646,7 @@ function TenantsTab() {
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
-        {tenants.map((tenant) => (
+        {paginatedTenants.map((tenant) => (
           <Card key={tenant.id}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
@@ -1507,8 +1680,30 @@ function TenantsTab() {
                   variant="outline"
                   size="sm"
                   className="mt-3 w-full gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
-                  onClick={() => {
+                  onClick={async () => {
                     setVacateTenant(tenant);
+                    try {
+                      const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
+                      if (res.ok) {
+                        const items = await res.json();
+                        if (Array.isArray(items) && items.length > 0) {
+                          setVacateItems(items.map((inv: any) => ({
+                            id: inv.id,
+                            itemName: inv.itemName,
+                            quantity: inv.quantity,
+                            condition: inv.condition,
+                            note: inv.note,
+                          })));
+                        } else {
+                          setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                        }
+                      } else {
+                        setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                      }
+                    } catch {
+                      setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                    }
+                    setEditingVacateIdx(null);
                     setVacateOpen(true);
                   }}
                 >
@@ -1520,14 +1715,24 @@ function TenantsTab() {
         ))}
       </div>
 
+      {/* Pagination */}
+      {totalTenantPages > 1 && (
+        <div className="flex items-center justify-center gap-1 mt-3">
+          <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={tenantPage <= 1} onClick={() => setTenantPage(tenantPage - 1)}>আগে</Button>
+          {Array.from({ length: totalTenantPages }, (_, i) => i + 1).map((p) => (
+            <Button key={p} variant={p === tenantPage ? "default" : "outline"} size="sm" className="h-7 w-7 text-xs p-0" onClick={() => setTenantPage(p)}>{p}</Button>
+          ))}
+          <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={tenantPage >= totalTenantPages} onClick={() => setTenantPage(tenantPage + 1)}>পরে</Button>
+        </div>
+      )}
+
       {/* Vacate Dialog */}
       <Dialog open={vacateOpen} onOpenChange={setVacateOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>ভাড়াটে রুম ছেড়ে দিন</DialogTitle>
             <DialogDescription>
-              {vacateTenant?.name} রুম ছেড়ে দিচ্ছেন। নিচে প্রাথমিক মালামালের তালিকা
-              দেখুন।
+              {vacateTenant?.name} রুম ছেড়ে দিচ্ছেন। মালামালের অবস্থা যাচাই করুন।
             </DialogDescription>
           </DialogHeader>
 
@@ -1540,48 +1745,75 @@ function TenantsTab() {
                 </p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-muted-foreground">শুরুর তারিখ</p>
+                <p className="text-xs text-muted-foreground">ভাড়াটে</p>
                 <p className="font-semibold">
-                  {vacateTenant && formatDate(vacateTenant.startDate)}
+                  {vacateTenant?.name}
                 </p>
               </div>
             </div>
 
-            {vacateTenant?.inventories &&
-              vacateTenant.inventories.length > 0 && (
-                <div>
-                  <Label className="mb-2 block">
-                    প্রাথমিক মালামালের তালিকা
-                  </Label>
-                  <div className="border rounded-lg overflow-hidden">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-gray-50">
-                          <TableHead>নাম</TableHead>
-                          <TableHead>পরিমাণ</TableHead>
-                          <TableHead>অবস্থা</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {vacateTenant.inventories.map((item) => (
-                          <TableRow key={item.id}>
-                            <TableCell>{item.itemName}</TableCell>
-                            <TableCell>{item.quantity}</TableCell>
-                            <TableCell>{item.condition}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>মালামালের তালিকা</Label>
+                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={addVacateItem}>
+                  <Plus className="size-3" />আইটেম যোগ
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {vacateItems.map((item, idx) => (
+                  <div key={idx} className={`rounded-lg border p-2 ${editingVacateIdx === idx ? "bg-emerald-50/50 border-emerald-200" : "bg-gray-50"}`}>
+                    <div className="flex items-center gap-2">
+                      {editingVacateIdx === idx ? (
+                        <>
+                          <div className="flex-1 grid grid-cols-[1fr_70px_100px_100px] gap-2 items-end">
+                            {idx === 0 && (
+                              <div className="col-span-4 grid grid-cols-[1fr_70px_100px_100px] gap-2">
+                                <span className="text-[10px] text-muted-foreground">নাম</span>
+                                <span className="text-[10px] text-muted-foreground">পরিমাণ</span>
+                                <span className="text-[10px] text-muted-foreground">অবস্থা</span>
+                                <span className="text-[10px] text-muted-foreground">নোট</span>
+                              </div>
+                            )}
+                            <Input className="h-8 text-xs" value={item.itemName} onChange={(e) => updateVacateItem(idx, "itemName", e.target.value)} placeholder="মালামালের নাম" />
+                            <Input className="h-8 text-xs" type="number" min={1} value={item.quantity} onChange={(e) => updateVacateItem(idx, "quantity", parseInt(e.target.value) || 1)} />
+                            <Select value={item.condition} onValueChange={(v) => updateVacateItem(idx, "condition", v)}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ভালো">ভালো</SelectItem>
+                                <SelectItem value="মাঝারি">মাঝারি</SelectItem>
+                                <SelectItem value="খারাপ">খারাপ</SelectItem>
+                                <SelectItem value="নস্ট">নস্ট</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input className="h-8 text-xs" value={item.note || ""} onChange={(e) => updateVacateItem(idx, "note", e.target.value)} placeholder="নোট" />
+                          </div>
+                          <Button variant="ghost" size="sm" className="size-7 p-0 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 shrink-0" onClick={() => setEditingVacateIdx(null)}>
+                            <Edit3 className="size-3.5" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex-1 flex items-center gap-3 text-sm min-w-0">
+                            <span className="font-medium truncate min-w-0 flex-1">{item.itemName || "—"}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">×{item.quantity}</span>
+                            <span className="shrink-0">{getConditionBadge(item.condition)}</span>
+                            {item.note && <span className="text-[10px] text-muted-foreground truncate shrink-0 hidden sm:inline">({item.note})</span>}
+                          </div>
+                          <div className="flex gap-0.5 shrink-0">
+                            <Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => setEditingVacateIdx(idx)}>
+                              <Edit3 className="size-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => removeVacateItem(idx)} disabled={vacateItems.length <= 1}>
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-
-            {vacateTenant?.inventories &&
-              vacateTenant.inventories.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  কোনো মালামালের রেকর্ড নেই।
-                </p>
-              )}
+                ))}
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -1591,8 +1823,10 @@ function TenantsTab() {
             <Button
               className="bg-orange-600 hover:bg-orange-700 text-white"
               onClick={handleVacate}
+              disabled={vacateLoading}
             >
-              রুম ছেড়ে দিন
+              {vacateLoading ? <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+              নিশ্চিত করুন — রুম ছেড়ে দিন
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1606,13 +1840,6 @@ function TenantsTab() {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 3 — Trouble Reports (Pending/Solved tabs + Month/Year search + Pagination)
 // ═══════════════════════════════════════════════════════════════════════════
-
-const BENGALI_MONTHS = [
-  { value: "1", label: "জানুয়ারি" }, { value: "2", label: "ফেব্রুয়ারি" }, { value: "3", label: "মার্চ" },
-  { value: "4", label: "এপ্রিল" }, { value: "5", label: "মে" }, { value: "6", label: "জুন" },
-  { value: "7", label: "জুলাই" }, { value: "8", label: "আগস্ট" }, { value: "9", label: "সেপ্টেম্বর" },
-  { value: "10", label: "অক্টোবর" }, { value: "11", label: "নভেম্বর" }, { value: "12", label: "ডিসেম্বর" },
-];
 
 function TroublesTab() {
   const [reports, setReports] = useState<TroubleReport[]>([]);

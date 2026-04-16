@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "অফিস আবাসিক ম্যানেজমেন্ট সিস্টেম",
+  title: "আবাসিক ম্যানেজমেন্ট",
   description: "অফিস আবাসিক এলাকার রুম, ভাড়াটে, মালামাল ও ট্রাবল রিপোর্ট ম্যানেজমেন্ট",
   keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
   authors: [{ name: "Z.ai Team" }],
