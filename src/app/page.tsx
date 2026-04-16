@@ -26,6 +26,7 @@ import {
   LogOut,
   KeyRound,
   Lock,
+  UserCheck,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -144,6 +145,21 @@ interface Building {
   totalFloors: number;
   createdAt: string;
   floors: Floor[];
+}
+
+interface Guest {
+  id: string;
+  name: string;
+  address?: string;
+  mobile?: string;
+  referredBy?: string;
+  checkInDate: string;
+  checkOutDate?: string;
+  totalBill?: string;
+  note?: string;
+  isPaid: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ── Helper ───────────────────────────────────────────────────────────────
@@ -881,6 +897,7 @@ function TenantsTab() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showGuestView, setShowGuestView] = useState(false);
 
   // Add tenant dialog
   const [addOpen, setAddOpen] = useState(false);
@@ -1061,6 +1078,26 @@ function TenantsTab() {
           <Users className="size-5 text-emerald-600" />
           ভাড়াটে ম্যানেজমেন্ট
         </h2>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${!showGuestView ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`}
+              onClick={() => setShowGuestView(false)}
+            >
+              <Users className="size-3.5" />
+              ভাড়াটে
+            </button>
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5 ${showGuestView ? "bg-blue-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`}
+              onClick={() => setShowGuestView(true)}
+            >
+              <UserCheck className="size-3.5" />
+              গেস্ট
+            </button>
+          </div>
+          {!showGuestView && (
         <Dialog
           open={addOpen}
           onOpenChange={(open) => {
@@ -1317,8 +1354,14 @@ function TenantsTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+          )}
+        </div>
       </div>
 
+      {showGuestView ? (
+        <GuestsTab />
+      ) : (
+        <>
       {tenants.length === 0 && (
         <Alert>
           <Users className="size-4" />
@@ -1506,6 +1549,8 @@ function TenantsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   );
 }
@@ -3565,6 +3610,233 @@ function OverviewTab() {
               যোগ করুন
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Guest Management Component
+// ═══════════════════════════════════════════════════════════════════════════
+
+function GuestsTab() {
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
+  const [filterMonth, setFilterMonth] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [addIsPaid, setAddIsPaid] = useState(true);
+  const [gName, setGName] = useState("");
+  const [gAddress, setGAddress] = useState("");
+  const [gMobile, setGMobile] = useState("");
+  const [gReferredBy, setGReferredBy] = useState("");
+  const [gCheckIn, setGCheckIn] = useState("");
+  const [gCheckOut, setGCheckOut] = useState("");
+  const [gTotalBill, setGTotalBill] = useState("");
+  const [gNote, setGNote] = useState("");
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [editGuest, setEditGuest] = useState<Guest | null>(null);
+  const [eName, setEName] = useState("");
+  const [eAddress, setEAddress] = useState("");
+  const [eMobile, setEMobile] = useState("");
+  const [eReferredBy, setEReferredBy] = useState("");
+  const [eCheckIn, setECheckIn] = useState("");
+  const [eCheckOut, setECheckOut] = useState("");
+  const [eTotalBill, setETotalBill] = useState("");
+  const [eNote, setENote] = useState("");
+  const [eIsPaid, setEIsPaid] = useState(true);
+
+  const loadGuests = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (filterMonth) params.set("month", filterMonth);
+      if (filterYear) params.set("year", filterYear);
+      const url = `/api/guests${params.toString() ? `?${params.toString()}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      setGuests(await res.json());
+    } catch { toast.error("গেস্ট লোড করতে সমস্যা হয়েছে"); }
+    finally { setLoading(false); }
+  }, [filterMonth, filterYear]);
+
+  useEffect(() => { loadGuests(); }, [loadGuests]);
+
+  const resetAddForm = () => {
+    setAddIsPaid(true); setGName(""); setGAddress(""); setGMobile("");
+    setGReferredBy(""); setGCheckIn(""); setGCheckOut(""); setGTotalBill(""); setGNote("");
+  };
+
+  const handleAdd = async () => {
+    if (!gName.trim() || !gCheckIn) { toast.error("নাম এবং চেক-ইন তারিখ দিন"); return; }
+    setSaving(true); setSaveError("");
+    try {
+      const payload = {
+        name: gName.trim(), address: gAddress.trim() || null, mobile: gMobile.trim() || null,
+        referredBy: gReferredBy.trim() || null, checkInDate: gCheckIn, checkOutDate: gCheckOut || null,
+        totalBill: addIsPaid ? (gTotalBill.trim() || null) : "Non Paid",
+        note: gNote.trim() || null, isPaid: addIsPaid,
+      };
+      const res = await fetch("/api/guests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.redirected) { setSaveError("সেশন মেয়াদোত্তীর্ণ। পেজ রিফ্রেশ করুন।"); return; }
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.includes("application/json")) { setSaveError("সার্ভার সমস্যা। পেজ রিফ্রেশ করুন।"); return; }
+      const data = await res.json();
+      if (!res.ok) { setSaveError(data?.error || `সার্ভার এরর (${res.status})`); return; }
+      toast.success(addIsPaid ? "Paid গেস্ট যোগ হয়েছে" : "Non Paid গেস্ট যোগ হয়েছে");
+      resetAddForm(); setAddOpen(false); loadGuests();
+    } catch (err) { setSaveError(err instanceof Error ? err.message : "নেটওয়ার্ক সমস্যা"); }
+    finally { setSaving(false); }
+  };
+
+  const openEdit = (g: Guest) => {
+    setEditGuest(g); setEName(g.name); setEAddress(g.address || ""); setEMobile(g.mobile || "");
+    setEReferredBy(g.referredBy || ""); setECheckIn(g.checkInDate?.split("T")[0] || "");
+    setECheckOut(g.checkOutDate?.split("T")[0] || "");
+    setETotalBill(g.totalBill === "Non Paid" ? "" : g.totalBill || "");
+    setENote(g.note || ""); setEIsPaid(g.isPaid); setEditOpen(true);
+  };
+
+  const handleEdit = async () => {
+    if (!editGuest || !eName.trim() || !eCheckIn) return;
+    try {
+      const res = await fetch("/api/guests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editGuest.id, name: eName.trim(), address: eAddress.trim() || null, mobile: eMobile.trim() || null, referredBy: eReferredBy.trim() || null, checkInDate: eCheckIn, checkOutDate: eCheckOut || null, totalBill: eIsPaid ? (eTotalBill.trim() || null) : "Non Paid", note: eNote.trim() || null, isPaid: eIsPaid }) });
+      if (!res.ok) throw new Error();
+      toast.success("গেস্ট আপডেট হয়েছে"); setEditOpen(false); setEditGuest(null); loadGuests();
+    } catch { toast.error("গেস্ট আপডেট করতে সমস্যা হয়েছে"); }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch("/api/guests", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error();
+      toast.success("গেস্ট মুছে ফেলা হয়েছে"); setExpandedGuestId(null); loadGuests();
+    } catch { toast.error("গেস্ট মুছে ফেলতে সমস্যা হয়েছে"); }
+  };
+
+  const months = [
+    { value: "1", label: "জানুয়ারি" }, { value: "2", label: "ফেব্রুয়ারি" }, { value: "3", label: "মার্চ" },
+    { value: "4", label: "এপ্রিল" }, { value: "5", label: "মে" }, { value: "6", label: "জুন" },
+    { value: "7", label: "জুলাই" }, { value: "8", label: "আগস্ট" }, { value: "9", label: "সেপ্টেম্বর" },
+    { value: "10", label: "অক্টোবর" }, { value: "11", label: "নভেম্বর" }, { value: "12", label: "ডিসেম্বর" },
+  ];
+
+  if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-lg font-semibold flex items-center gap-2"><UserCheck className="size-5 text-blue-600" />গেস্ট ম্যানেজমেন্ট</h3>
+        <Dialog open={addOpen} onOpenChange={(o) => { setAddOpen(o); if (!o) { resetAddForm(); setSaveError(""); } }}>
+          <DialogTrigger asChild><Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Plus className="size-4" />নতুন গেস্ট</Button></DialogTrigger>
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader><DialogTitle className="flex items-center gap-2"><UserCheck className="size-5 text-blue-600" />নতুন গেস্ট যোগ করুন</DialogTitle><DialogDescription>গেস্টের তথ্য দিন</DialogDescription></DialogHeader>
+            <div className="space-y-3">
+              <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${addIsPaid ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setAddIsPaid(true)}>Paid</button>
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${!addIsPaid ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => { setAddIsPaid(false); setGTotalBill(""); }}>Non Paid</button>
+              </div>
+              <div className="space-y-1.5"><Label>নাম *</Label><Input placeholder="গেস্টের নাম" value={gName} onChange={(e) => setGName(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>ঠিকানা</Label><Input placeholder="ঠিকানা" value={gAddress} onChange={(e) => setGAddress(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>মোবাইল নম্বর</Label><Input placeholder="০১XXXXXXXXX" value={gMobile} onChange={(e) => setGMobile(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Refered By</Label><Input placeholder="রেফার করেছেন" value={gReferredBy} onChange={(e) => setGReferredBy(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label>চেক-ইন তারিখ *</Label><Input type="date" value={gCheckIn} onChange={(e) => setGCheckIn(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>চেক-আউট তারিখ</Label><Input type="date" value={gCheckOut} onChange={(e) => setGCheckOut(e.target.value)} /></div>
+              </div>
+              {addIsPaid ? <div className="space-y-1.5"><Label>মোট বিল</Label><Input type="number" placeholder="বিলের পরিমাণ" value={gTotalBill} onChange={(e) => setGTotalBill(e.target.value)} /></div> : <div className="bg-orange-50 border border-orange-200 rounded-lg p-3"><p className="text-sm font-medium text-orange-700">Total Bill: Non Paid</p><p className="text-xs text-orange-600 mt-0.5">এই গেস্ট Non Paid হিসেবে চিহ্নিত হবে</p></div>}
+              <div className="space-y-1.5"><Label>নোট (ঐচ্ছিক)</Label><Textarea placeholder="বিশেষ নোট" value={gNote} onChange={(e) => setGNote(e.target.value)} rows={2} /></div>
+            </div>
+            {saveError && <div className="bg-red-50 border border-red-200 rounded-lg p-3"><p className="text-sm font-medium text-red-700">সমস্যা: {saveError}</p></div>}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setAddOpen(false); resetAddForm(); setSaveError(""); }} disabled={saving}>বাতিল</Button>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleAdd} disabled={saving}>{saving ? (<><div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> সেভ হচ্ছে...</>) : "সেভ করুন"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Card className="border-dashed"><CardContent className="p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium">সার্চ:</span>
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+            <Select value={filterMonth || "__all__"} onValueChange={(v) => setFilterMonth(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-full sm:w-[130px] h-8 text-xs"><SelectValue placeholder="মাস" /></SelectTrigger>
+              <SelectContent><SelectItem value="__all__">সব মাস</SelectItem>{months.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
+            </Select>
+            <Input className="w-full sm:w-[90px] h-8 text-xs" placeholder="বছর (২০২৬)" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} />
+          </div>
+          {(filterMonth || filterYear) && <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-red-500" onClick={() => { setFilterMonth(""); setFilterYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>}
+          <span className="text-xs text-muted-foreground ml-auto">মোট: {guests.length} জন</span>
+        </div>
+      </CardContent></Card>
+
+      {guests.length === 0 ? (
+        <Alert><UserCheck className="size-4" /><AlertDescription>কোনো গেস্ট নেই। নতুন গেস্ট যোগ করুন।</AlertDescription></Alert>
+      ) : (
+        <div className="space-y-1">{guests.map((guest) => (
+          <div key={guest.id} className="border rounded-md overflow-hidden">
+            <div className="group flex items-center gap-2 px-2.5 py-2 bg-white hover:shadow-sm transition-all cursor-pointer" onClick={() => setExpandedGuestId(expandedGuestId === guest.id ? null : guest.id)}>
+              {expandedGuestId === guest.id ? <ChevronDown className="size-3 text-muted-foreground shrink-0" /> : <ChevronRight className="size-3 text-muted-foreground shrink-0" />}
+              <div className={`size-2 rounded-full shrink-0 ${guest.isPaid ? "bg-emerald-500" : "bg-orange-500"}`} />
+              <span className="font-medium text-xs truncate min-w-0 flex-1">{guest.name}</span>
+              {guest.mobile && <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden sm:inline"><Phone className="size-2.5 inline mr-0.5 -mt-px" />{guest.mobile}</span>}
+              {guest.referredBy && <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden md:inline">রেফার: {guest.referredBy}</span>}
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 ${guest.isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>{guest.isPaid ? "Paid" : "Non Paid"}</span>
+            </div>
+            {expandedGuestId === guest.id && (
+              <div className="bg-gray-50/80 border-t px-3 py-3 space-y-3 animate-in slide-in-from-top-1 duration-200">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">নাম</p><p className="font-medium">{guest.name}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">মোবাইল</p><p className="font-medium">{guest.mobile || "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">Refered By</p><p className="font-medium">{guest.referredBy || "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">স্ট্যাটাস</p><p className="font-medium"><span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${guest.isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>{guest.isPaid ? "Paid" : "Non Paid"}</span></p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">ঠিকানা</p><p className="font-medium">{guest.address || "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-ইন</p><p className="font-medium">{formatDate(guest.checkInDate)}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-আউট</p><p className="font-medium">{guest.checkOutDate ? formatDate(guest.checkOutDate) : "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">মোট বিল</p><p className="font-medium">{guest.totalBill || "—"}</p></div>
+                  {guest.note && <div className="col-span-2 sm:col-span-4 space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">নোট</p><p className="font-medium">{guest.note}</p></div>}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="gap-1.5 h-7 text-[11px] px-3 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); openEdit(guest); }}><Edit3 className="size-3" />এডিট</Button>
+                  <AlertDialog><AlertDialogTrigger asChild><Button variant="outline" size="sm" className="gap-1.5 h-7 text-[11px] px-3 text-red-600 border-red-200 hover:bg-red-50" onClick={(e) => e.stopPropagation()}><Trash2 className="size-3" />ডিলিট</Button></AlertDialogTrigger>
+                    <AlertDialogContent onClick={(e) => e.stopPropagation()}><AlertDialogHeader><AlertDialogTitle>গেস্ট মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{guest.name}&quot; এর সকল তথ্য স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDelete(guest.id)}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}</div>
+      )}
+
+      <Dialog open={editOpen} onOpenChange={(o) => { setEditOpen(o); if (!o) setEditGuest(null); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Edit3 className="size-5 text-blue-600" />গেস্ট সম্পাদনা</DialogTitle><DialogDescription>{editGuest?.name} — তথ্য আপডেট করুন</DialogDescription></DialogHeader>
+          {editGuest && (
+            <div className="space-y-3">
+              <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${eIsPaid ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setEIsPaid(true)}>Paid</button>
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${!eIsPaid ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => { setEIsPaid(false); setETotalBill(""); }}>Non Paid</button>
+              </div>
+              <div className="space-y-1.5"><Label>নাম *</Label><Input value={eName} onChange={(e) => setEName(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>ঠিকানা</Label><Input value={eAddress} onChange={(e) => setEAddress(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>মোবাইল</Label><Input value={eMobile} onChange={(e) => setEMobile(e.target.value)} /></div>
+              <div className="space-y-1.5"><Label>Refered By</Label><Input value={eReferredBy} onChange={(e) => setEReferredBy(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label>চেক-ইন *</Label><Input type="date" value={eCheckIn} onChange={(e) => setECheckIn(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>চেক-আউট</Label><Input type="date" value={eCheckOut} onChange={(e) => setECheckOut(e.target.value)} /></div>
+              </div>
+              {eIsPaid ? <div className="space-y-1.5"><Label>মোট বিল</Label><Input type="number" value={eTotalBill} onChange={(e) => setETotalBill(e.target.value)} /></div> : <div className="bg-orange-50 border border-orange-200 rounded-lg p-3"><p className="text-sm font-medium text-orange-700">Total Bill: Non Paid</p></div>}
+              <div className="space-y-1.5"><Label>নোট</Label><Textarea value={eNote} onChange={(e) => setENote(e.target.value)} rows={2} /></div>
+            </div>
+          )}
+          <DialogFooter><Button variant="outline" onClick={() => { setEditOpen(false); setEditGuest(null); }}>বাতিল</Button><Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleEdit}>আপডেট করুন</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
