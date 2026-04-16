@@ -2,20 +2,24 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    // Direct test of libsql client
-    const { createClient } = await import('@libsql/client');
     const databaseUrl = process.env.DATABASE_URL || '';
     
+    // Test 1: Direct libsql
+    const { createClient } = await import('@libsql/client');
     const client = createClient({ url: databaseUrl });
     const result = await client.execute('SELECT 1 as test');
     
-    // Test Prisma adapter
+    // Test 2: Prisma with adapter + datasourceUrl override
     const { PrismaLibSQL } = await import('@prisma/adapter-libsql');
+    const { PrismaClient } = await import('@prisma/client');
     const libsql = createClient({ url: databaseUrl });
     const adapter = new PrismaLibSQL(libsql);
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient({ adapter });
+    const prisma = new PrismaClient({ 
+      adapter,
+      datasourceUrl: 'file:/tmp/dummy.db',
+    });
     const userCount = await prisma.user.count();
+    await prisma.$disconnect();
     
     return NextResponse.json({
       directLibsql: result.rows,
@@ -23,7 +27,7 @@ export async function GET() {
       dbUrl: databaseUrl.substring(0, 40) + '...',
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message + '\n' + err.stack : String(err);
-    return NextResponse.json({ error: msg.substring(0, 1000) }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg.substring(0, 500) }, { status: 500 });
   }
 }
