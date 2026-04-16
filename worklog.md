@@ -1,4 +1,26 @@
 ---
+Task ID: 6
+Agent: Main Agent
+Task: সেটআপ পেজ ত্রুটি ঠিক করা — "অ্যাকাউন্ট তৈরি করতে সমস্যা হয়েছে"
+
+Work Log:
+- সমস্যা বিশ্লেষণ: login page এর handleSetup এ fetch থ্রো করছিল (catch block থেকে error message আসছিল)
+- কারণ: Turso database তে User table না থাকলে Prisma query fail হতো, আর API response JSON না হলে res.json() থ্রো করতো
+- src/lib/db-init.ts তৈরি: @libsql/client ব্যবহার করে runtime এ সব টেবিল তৈরি করে (Prisma bypass)
+- src/app/api/auth/init/route.ts আপডেট: ensureTablesExist() কল যোগ, error logging উন্নত, isSetup: true সেট
+- src/app/api/auth/login/route.ts আপডেট: ensureTablesExist() কল যোগ
+- src/app/login/page.tsx আপডেট: res.json() failure handling যোগ, non-JSON response handle
+- src/lib/db.ts আপডেট: TURSO_AUTH_TOKEN separate env var support, connection logging
+- scripts/sync-db.js তৈরি: build-time schema sync utility
+- package.json আপডেট: build script এ sync-db.js যোগ
+
+Stage Summary:
+- সমস্যার মূল কারণ: ডাটাবেস টেবিল না থাকলে Prisma query fail → API JSON response return না করতো → client catch block execute
+- সমাধান: @libsql/client দিয়ে runtime এ টেবিল তৈরি (ensureTablesExist), client-side error handling উন্নত
+- লাইভ সাইট ভেরিফাই: needsInit: false — ডাটাবেসে ইতিমধ্যে একটি ইউজার আছে
+- GitHub এ push সম্পন্ন, Vercel তে auto-deploy হয়েছে
+
+---
 Task ID: 5
 Agent: Main Agent
 Task: আবাসিক ম্যানেজমেন্ট সিস্টেম — বিভিন্ন ফিচার আপডেট
