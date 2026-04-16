@@ -164,6 +164,11 @@ interface Guest {
 
 // ── Helper ───────────────────────────────────────────────────────────────
 
+function toBanglaNumber(num: number | string): string {
+  const bengaliDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
+  return String(num).replace(/\d/g, (d) => bengaliDigits[parseInt(d)]);
+}
+
 function formatDate(dateStr: string) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -3626,6 +3631,7 @@ function GuestsTab() {
   const [expandedGuestId, setExpandedGuestId] = useState<string | null>(null);
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -3652,6 +3658,17 @@ function GuestsTab() {
   const [eNote, setENote] = useState("");
   const [eIsPaid, setEIsPaid] = useState(true);
 
+  const loadAvailableYears = useCallback(async () => {
+    try {
+      const res = await fetch("/api/guests?all=true");
+      if (res.ok) {
+        const allGuests: Guest[] = await res.json();
+        const years = [...new Set(allGuests.map((g) => new Date(g.checkInDate).getFullYear()))].sort((a, b) => b - a);
+        setAvailableYears(years);
+      }
+    } catch { /* চুপ করে থাকুন */ }
+  }, []);
+
   const loadGuests = useCallback(async () => {
     try {
       setLoading(true);
@@ -3666,6 +3683,7 @@ function GuestsTab() {
     finally { setLoading(false); }
   }, [filterMonth, filterYear]);
 
+  useEffect(() => { loadAvailableYears(); }, [loadAvailableYears]);
   useEffect(() => { loadGuests(); }, [loadGuests]);
 
   const resetAddForm = () => {
@@ -3690,7 +3708,7 @@ function GuestsTab() {
       const data = await res.json();
       if (!res.ok) { setSaveError(data?.error || `সার্ভার এরর (${res.status})`); return; }
       toast.success(addIsPaid ? "Paid গেস্ট যোগ হয়েছে" : "Non Paid গেস্ট যোগ হয়েছে");
-      resetAddForm(); setAddOpen(false); loadGuests();
+      resetAddForm(); setAddOpen(false); loadGuests(); loadAvailableYears();
     } catch (err) { setSaveError(err instanceof Error ? err.message : "নেটওয়ার্ক সমস্যা"); }
     finally { setSaving(false); }
   };
@@ -3708,7 +3726,7 @@ function GuestsTab() {
     try {
       const res = await fetch("/api/guests", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editGuest.id, name: eName.trim(), address: eAddress.trim() || null, mobile: eMobile.trim() || null, referredBy: eReferredBy.trim() || null, checkInDate: eCheckIn, checkOutDate: eCheckOut || null, totalBill: eIsPaid ? (eTotalBill.trim() || null) : "Non Paid", note: eNote.trim() || null, isPaid: eIsPaid }) });
       if (!res.ok) throw new Error();
-      toast.success("গেস্ট আপডেট হয়েছে"); setEditOpen(false); setEditGuest(null); loadGuests();
+      toast.success("গেস্ট আপডেট হয়েছে"); setEditOpen(false); setEditGuest(null); loadGuests(); loadAvailableYears();
     } catch { toast.error("গেস্ট আপডেট করতে সমস্যা হয়েছে"); }
   };
 
@@ -3716,7 +3734,7 @@ function GuestsTab() {
     try {
       const res = await fetch("/api/guests", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
       if (!res.ok) throw new Error();
-      toast.success("গেস্ট মুছে ফেলা হয়েছে"); setExpandedGuestId(null); loadGuests();
+      toast.success("গেস্ট মুছে ফেলা হয়েছে"); setExpandedGuestId(null); loadGuests(); loadAvailableYears();
     } catch { toast.error("গেস্ট মুছে ফেলতে সমস্যা হয়েছে"); }
   };
 
@@ -3770,7 +3788,13 @@ function GuestsTab() {
               <SelectTrigger className="w-full sm:w-[130px] h-8 text-xs"><SelectValue placeholder="মাস" /></SelectTrigger>
               <SelectContent><SelectItem value="__all__">সব মাস</SelectItem>{months.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
             </Select>
-            <Input className="w-full sm:w-[90px] h-8 text-xs" placeholder="বছর (২০২৬)" value={filterYear} onChange={(e) => setFilterYear(e.target.value)} />
+            <Select value={filterYear || "__all__"} onValueChange={(v) => setFilterYear(v === "__all__" ? "" : v)}>
+              <SelectTrigger className="w-full sm:w-[110px] h-8 text-xs"><SelectValue placeholder="বছর" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">সব বছর</SelectItem>
+                {availableYears.map((y) => (<SelectItem key={y} value={String(y)}>{toBanglaNumber(y)}</SelectItem>))}
+              </SelectContent>
+            </Select>
           </div>
           {(filterMonth || filterYear) && <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-red-500" onClick={() => { setFilterMonth(""); setFilterYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>}
           <span className="text-xs text-muted-foreground ml-auto">মোট: {guests.length} জন</span>

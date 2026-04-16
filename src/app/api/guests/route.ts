@@ -9,12 +9,13 @@ function toEnglishDigits(str: string): string {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const all = searchParams.get("all");
     const month = searchParams.get("month");
     const year = searchParams.get("year");
 
     const where: Record<string, unknown> = {};
 
-    if (month || year) {
+    if (!all && (month || year)) {
       const dateFilter: Record<string, unknown> = {};
       const engYear = year ? parseInt(toEnglishDigits(year)) : null;
       const engMonth = month ? parseInt(toEnglishDigits(month)) : null;
