@@ -27,7 +27,7 @@ export default function LoginPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("loading");
 
   // Login form
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState("mehedi4894");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);

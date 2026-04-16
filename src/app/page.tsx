@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -219,6 +219,8 @@ export default function HomePage() {
   const [currentPass, setCurrentPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [changePassLoading, setChangePassLoading] = useState(false);
+  // Auto-logout timer ref
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -234,6 +236,42 @@ export default function HomePage() {
         window.location.href = "/login";
       });
   }, []);
+
+  // Auto-logout after 10 minutes of inactivity
+  useEffect(() => {
+    if (checking) return; // Don't start timer while checking auth
+
+    const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+
+    const resetTimer = () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      inactivityTimerRef.current = setTimeout(() => {
+        toast.info("নিরাপত্তার জন্য অটো লগআউট হয়েছে");
+        fetch("/api/auth/logout", { method: "POST" }).then(() => {
+          window.location.href = "/login";
+        });
+      }, INACTIVITY_TIMEOUT);
+    };
+
+    const activityEvents = ["mousedown", "keydown", "scroll", "touchstart", "click"];
+    activityEvents.forEach((evt) => {
+      document.addEventListener(evt, resetTimer, { passive: true });
+    });
+
+    // Start initial timer
+    resetTimer();
+
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      activityEvents.forEach((evt) => {
+        document.removeEventListener(evt, resetTimer);
+      });
+    };
+  }, [checking]);
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -284,7 +322,13 @@ export default function HomePage() {
         <MainTabs />
         <footer className="mt-12 border-t pt-6 pb-8 text-center">
           <p className="text-sm text-muted-foreground">
-            Md. Mehedi Hasan, Caretaker, EGB PLC.
+            আবাসিক ম্যানেজমেন্ট @২০২৬
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Md. Mehedi Hasan
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Caretaker, EGB PLC.
           </p>
         </footer>
       </div>
@@ -330,7 +374,7 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
   const [totalRooms, setTotalRooms] = useState(0);
   const [activeTenants, setActiveTenants] = useState(0);
 
-  useEffect(() => {
+  const loadCounts = useCallback(() => {
     fetch("/api/buildings")
       .then((r) => r.json())
       .then((data) => {
@@ -350,6 +394,15 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadCounts();
+    const handleDataChange = () => loadCounts();
+    window.addEventListener("dashboard-data-changed", handleDataChange);
+    return () => {
+      window.removeEventListener("dashboard-data-changed", handleDataChange);
+    };
+  }, [loadCounts]);
 
   return (
     <header className="mb-8">
@@ -492,6 +545,7 @@ function BuildingsTab() {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBuildings(data);
+      window.dispatchEvent(new Event("dashboard-data-changed"));
     } catch {
       toast.error("বিল্ডিং লোড করতে সমস্যা হয়েছে");
     } finally {
@@ -927,6 +981,7 @@ function TenantsTab() {
       if (!tRes.ok || !bRes.ok) throw new Error();
       setTenants(await tRes.json());
       setBuildings(await bRes.json());
+      window.dispatchEvent(new Event("dashboard-data-changed"));
     } catch {
       toast.error("তথ্য লোড করতে সমস্যা হয়েছে");
     } finally {
@@ -1555,15 +1610,28 @@ function TenantsTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 3 — Trouble Reports
+// TAB 3 — Trouble Reports (Pending/Solved tabs + Month/Year search + Pagination)
 // ═══════════════════════════════════════════════════════════════════════════
+
+const BENGALI_MONTHS = [
+  { value: "1", label: "জানুয়ারি" }, { value: "2", label: "ফেব্রুয়ারি" }, { value: "3", label: "মার্চ" },
+  { value: "4", label: "এপ্রিল" }, { value: "5", label: "মে" }, { value: "6", label: "জুন" },
+  { value: "7", label: "জুলাই" }, { value: "8", label: "আগস্ট" }, { value: "9", label: "সেপ্টেম্বর" },
+  { value: "10", label: "অক্টোবর" }, { value: "11", label: "নভেম্বর" }, { value: "12", label: "ডিসেম্বর" },
+];
 
 function TroublesTab() {
   const [reports, setReports] = useState<TroubleReport[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeSubTab, setActiveSubTab] = useState<"pending" | "solved">("pending");
+  const [searchMonth, setSearchMonth] = useState("");
+  const [searchYear, setSearchYear] = useState("");
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [solvedPage, setSolvedPage] = useState(1);
+  const PAGE_SIZE = 10;
 
-  // Create report dialog
   const [createOpen, setCreateOpen] = useState(false);
   const [crBuildingId, setCrBuildingId] = useState("");
   const [crFloorId, setCrFloorId] = useState("");
@@ -1572,11 +1640,8 @@ function TroublesTab() {
   const [crDescription, setCrDescription] = useState("");
   const [crReportedBy, setCrReportedBy] = useState("");
 
-  // Resolve dialog
   const [resolveOpen, setResolveOpen] = useState(false);
-  const [resolveReport, setResolveReport] = useState<TroubleReport | null>(
-    null
-  );
+  const [resolveReport, setResolveReport] = useState<TroubleReport | null>(null);
   const [rsNote, setRsNote] = useState("");
   const [rsResolvedBy, setRsResolvedBy] = useState("");
   const [rsNewItems, setRsNewItems] = useState<
@@ -1586,13 +1651,13 @@ function TroublesTab() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [tRes, bRes] = await Promise.all([
-        fetch("/api/troubles"),
-        fetch("/api/buildings"),
-      ]);
+      const [tRes, bRes] = await Promise.all([fetch("/api/troubles"), fetch("/api/buildings")]);
       if (!tRes.ok || !bRes.ok) throw new Error();
-      setReports(await tRes.json());
+      const allReports: TroubleReport[] = await tRes.json();
+      setReports(allReports);
       setBuildings(await bRes.json());
+      const years = [...new Set(allReports.map((r) => new Date(r.reportedAt).getFullYear()))].sort((a, b) => b - a);
+      setAvailableYears(years);
     } catch {
       toast.error("তথ্য লোড করতে সমস্যা হয়েছে");
     } finally {
@@ -1600,516 +1665,171 @@ function TroublesTab() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const getFilteredReports = useCallback(() => {
+    if (!searchMonth && !searchYear) return reports;
+    return reports.filter((r) => {
+      const d = new Date(r.reportedAt);
+      const mOk = !searchMonth || d.getMonth() + 1 === parseInt(searchMonth);
+      const yOk = !searchYear || d.getFullYear() === parseInt(searchYear);
+      return mOk && yOk;
+    });
+  }, [reports, searchMonth, searchYear]);
+
+  const pendingReports = getFilteredReports().filter((r) => r.status !== "সমাধান হয়েছে");
+  const solvedReports = getFilteredReports().filter((r) => r.status === "সমাধান হয়েছে");
+
+  const totalPendingPages = Math.max(1, Math.ceil(pendingReports.length / PAGE_SIZE));
+  const totalSolvedPages = Math.max(1, Math.ceil(solvedReports.length / PAGE_SIZE));
+  const paginatedPending = pendingReports.slice((pendingPage - 1) * PAGE_SIZE, pendingPage * PAGE_SIZE);
+  const paginatedSolved = solvedReports.slice((solvedPage - 1) * PAGE_SIZE, solvedPage * PAGE_SIZE);
 
   const crBuilding = buildings.find((b) => b.id === crBuildingId);
   const crFloor = crBuilding?.floors?.find((f) => f.id === crFloorId);
   const crRoom = crFloor?.rooms?.find((r) => r.id === crRoomId);
 
-  useEffect(() => {
-    if (crRoom) setCrRoomNumber(crRoom.roomNumber);
-    else setCrRoomNumber("");
-  }, [crRoom]);
+  useEffect(() => { if (crRoom) setCrRoomNumber(crRoom.roomNumber); else setCrRoomNumber(""); }, [crRoom]);
+  useEffect(() => { setPendingPage(1); setSolvedPage(1); }, [searchMonth, searchYear]);
 
   const handleCreate = async () => {
-    if (!crRoomId || !crDescription.trim() || !crReportedBy.trim()) {
-      toast.error("রুম, বিবরণ ও প্রতিবেদকের নাম দিন");
-      return;
-    }
+    if (!crRoomId || !crDescription.trim() || !crReportedBy.trim()) { toast.error("রুম, বিবরণ ও প্রতিবেদকের নাম দিন"); return; }
     try {
-      const res = await fetch("/api/troubles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomNumber: crRoomNumber,
-          roomId: crRoomId,
-          description: crDescription.trim(),
-          reportedBy: crReportedBy.trim(),
-        }),
-      });
+      const res = await fetch("/api/troubles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomNumber: crRoomNumber, roomId: crRoomId, description: crDescription.trim(), reportedBy: crReportedBy.trim() }) });
       if (!res.ok) throw new Error();
       toast.success("ট্রাবল রিপোর্ট তৈরি হয়েছে");
-      setCreateOpen(false);
-      setCrBuildingId("");
-      setCrFloorId("");
-      setCrRoomId("");
-      setCrRoomNumber("");
-      setCrDescription("");
-      setCrReportedBy("");
+      setCreateOpen(false); setCrBuildingId(""); setCrFloorId(""); setCrRoomId(""); setCrRoomNumber(""); setCrDescription(""); setCrReportedBy("");
       loadData();
-    } catch {
-      toast.error("ট্রাবল রিপোর্ট তৈরি করতে সমস্যা হয়েছে");
-    }
+    } catch { toast.error("ট্রাবল রিপোর্ট তৈরি করতে সমস্যা হয়েছে"); }
   };
 
   const handleResolve = async () => {
-    if (!resolveReport || !rsResolvedBy.trim()) {
-      toast.error("সমাধানকারীর নাম দিন");
-      return;
-    }
+    if (!resolveReport || !rsResolvedBy.trim()) { toast.error("সমাধানকারীর নাম দিন"); return; }
     try {
-      const res = await fetch("/api/troubles", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: resolveReport.id,
-          resolutionNote: rsNote.trim() || null,
-          resolvedBy: rsResolvedBy.trim(),
-          newItems: rsNewItems.filter((i) => i.itemName.trim()),
-        }),
-      });
+      const res = await fetch("/api/troubles", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: resolveReport.id, resolutionNote: rsNote.trim() || null, resolvedBy: rsResolvedBy.trim(), newItems: rsNewItems.filter((i) => i.itemName.trim()) }) });
       if (!res.ok) throw new Error();
       toast.success("সমস্যা সমাধান হয়েছে");
-      setResolveOpen(false);
-      setResolveReport(null);
-      setRsNote("");
-      setRsResolvedBy("");
-      setRsNewItems([]);
+      setResolveOpen(false); setResolveReport(null); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]);
       loadData();
-    } catch {
-      toast.error("সমস্যা সমাধান করতে সমস্যা হয়েছে");
-    }
+    } catch { toast.error("সমস্যা সমাধান করতে সমস্যা হয়েছে"); }
   };
 
-  const addRsItem = () =>
-    setRsNewItems((prev) => [
-      ...prev,
-      { itemName: "", quantity: "1", condition: "ভালো", note: "" },
-    ]);
+  const addRsItem = useCallback(() => setRsNewItems((prev) => [...prev, { itemName: "", quantity: "1", condition: "ভালো", note: "" }]), []);
+  const removeRsItem = useCallback((idx: number) => setRsNewItems((prev) => prev.filter((_, i) => i !== idx)), []);
+  const updateRsItem = useCallback((idx: number, field: string, value: string) => setRsNewItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))), []);
 
-  const removeRsItem = (idx: number) =>
-    setRsNewItems((prev) => prev.filter((_, i) => i !== idx));
+  if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /></div>);
 
-  const updateRsItem = (
-    idx: number,
-    field: string,
-    value: string
-  ) =>
-    setRsNewItems((prev) =>
-      prev.map((item, i) =>
-        i === idx ? { ...item, [field]: value } : item
-      )
-    );
-
-  if (loading) {
+  const Pagination = ({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) => {
+    if (totalPages <= 1) return null;
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+      <div className="flex items-center justify-center gap-1 mt-3">
+        <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>আগে</Button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (<Button key={p} variant={p === page ? "default" : "outline"} size="sm" className="h-7 w-7 text-xs p-0" onClick={() => onPageChange(p)}>{p}</Button>))}
+        <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>পরে</Button>
       </div>
     );
-  }
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <AlertTriangle className="size-5 text-emerald-600" />
-          ট্রাবল রিপোর্ট
-        </h2>
-        <Dialog
-          open={createOpen}
-          onOpenChange={(open) => {
-            setCreateOpen(open);
-            if (!open) {
-              setCrBuildingId("");
-              setCrFloorId("");
-              setCrRoomId("");
-              setCrRoomNumber("");
-              setCrDescription("");
-              setCrReportedBy("");
-            }
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-              <Plus className="size-4" />
-              নতুন রিপোর্ট
-            </Button>
-          </DialogTrigger>
+        <h2 className="text-xl font-semibold flex items-center gap-2"><AlertTriangle className="size-5 text-emerald-600" />ট্রাবল রিপোর্ট</h2>
+        <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) { setCrBuildingId(""); setCrFloorId(""); setCrRoomId(""); setCrRoomNumber(""); setCrDescription(""); setCrReportedBy(""); } }}>
+          <DialogTrigger asChild><Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"><Plus className="size-4" />নতুন রিপোর্ট</Button></DialogTrigger>
           <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>নতুন ট্রাবল রিপোর্ট</DialogTitle>
-              <DialogDescription>
-                সমস্যার বিবরণ এবং রুম নির্বাচন করুন
-              </DialogDescription>
-            </DialogHeader>
-
+            <DialogHeader><DialogTitle>নতুন ট্রাবল রিপোর্ট</DialogTitle><DialogDescription>সমস্যার বিবরণ এবং রুম নির্বাচন করুন</DialogDescription></DialogHeader>
             <div className="space-y-4">
-              {/* Room cascade */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>বিল্ডিং</Label>
-                  <Select
-                    value={crBuildingId}
-                    onValueChange={(v) => {
-                      setCrBuildingId(v);
-                      setCrFloorId("");
-                      setCrRoomId("");
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="বিল্ডিং" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buildings.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>তলা</Label>
-                  <Select
-                    value={crFloorId}
-                    onValueChange={(v) => {
-                      setCrFloorId(v);
-                      setCrRoomId("");
-                    }}
-                    disabled={!crBuildingId}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="তলা" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {crBuilding?.floors?.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.floorNumber} তলা
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>রুম</Label>
-                  <Select
-                    value={crRoomId}
-                    onValueChange={setCrRoomId}
-                    disabled={!crFloorId}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="রুম" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {crFloor?.rooms?.map((r) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.roomNumber}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <div className="space-y-1.5"><Label>বিল্ডিং</Label><Select value={crBuildingId} onValueChange={(v) => { setCrBuildingId(v); setCrFloorId(""); setCrRoomId(""); }}><SelectTrigger className="w-full"><SelectValue placeholder="বিল্ডিং" /></SelectTrigger><SelectContent>{buildings.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div>
+                <div className="space-y-1.5"><Label>তলা</Label><Select value={crFloorId} onValueChange={(v) => { setCrFloorId(v); setCrRoomId(""); }} disabled={!crBuildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা" /></SelectTrigger><SelectContent>{crBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
+                <div className="space-y-1.5"><Label>রুম</Label><Select value={crRoomId} onValueChange={setCrRoomId} disabled={!crFloorId}><SelectTrigger className="w-full"><SelectValue placeholder="রুম" /></SelectTrigger><SelectContent>{crFloor?.rooms?.map((r) => (<SelectItem key={r.id} value={r.id}>{r.roomNumber}</SelectItem>))}</SelectContent></Select></div>
               </div>
-
-              <div className="space-y-1.5">
-                <Label>সমস্যার বিবরণ *</Label>
-                <Textarea
-                  placeholder="সমস্যার বিস্তারিত লিখুন..."
-                  value={crDescription}
-                  onChange={(e) => setCrDescription(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>প্রতিবেদকের নাম *</Label>
-                <Input
-                  placeholder="যে রিপোর্ট করছেন"
-                  value={crReportedBy}
-                  onChange={(e) => setCrReportedBy(e.target.value)}
-                />
-              </div>
+              <div className="space-y-1.5"><Label>সমস্যার বিবরণ *</Label><Textarea placeholder="সমস্যার বিস্তারিত লিখুন..." value={crDescription} onChange={(e) => setCrDescription(e.target.value)} rows={3} /></div>
+              <div className="space-y-1.5"><Label>প্রতিবেদকের নাম *</Label><Input placeholder="যে রিপোর্ট করছেন" value={crReportedBy} onChange={(e) => setCrReportedBy(e.target.value)} /></div>
             </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setCreateOpen(false)}
-              >
-                বাতিল
-              </Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleCreate}
-              >
-                জমা দিন
-              </Button>
-            </DialogFooter>
+            <DialogFooter><Button variant="outline" onClick={() => setCreateOpen(false)}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleCreate}>জমা দিন</Button></DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {reports.length === 0 && (
-        <Alert>
-          <AlertTriangle className="size-4" />
-          <AlertDescription>
-            কোনো ট্রাবল রিপোর্ট নেই।
-          </AlertDescription>
-        </Alert>
+      {/* Search filters */}
+      <Card><CardContent className="p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Search className="size-4 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium text-muted-foreground">সার্চ:</span>
+          <Select value={searchMonth} onValueChange={(v) => setSearchMonth(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="মাস বেছে নিন" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">সব মাস</SelectItem>
+              {BENGALI_MONTHS.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          <Select value={searchYear || "__all"} onValueChange={(v) => setSearchYear(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-[100px] h-8 text-xs"><SelectValue placeholder="বছর" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">সব বছর</SelectItem>
+              {availableYears.map((y) => (<SelectItem key={y} value={String(y)}>{toBanglaNumber(y)}</SelectItem>))}
+            </SelectContent>
+          </Select>
+          {(searchMonth || searchYear) && (<Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setSearchMonth(""); setSearchYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>)}
+        </div>
+      </CardContent></Card>
+
+      {/* Sub-tabs */}
+      <div className="flex bg-gray-100 rounded-lg p-0.5">
+        <button type="button" className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === "pending" ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setActiveSubTab("pending")}>
+          <Clock className="size-3.5" />পেন্ডিং + চলমান<Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${activeSubTab === "pending" ? "bg-white/20 text-white border-white/30" : ""}`}>{pendingReports.length}</Badge>
+        </button>
+        <button type="button" className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === "solved" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setActiveSubTab("solved")}>
+          <CheckCircle2 className="size-3.5" />সমাধান হয়েছে<Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${activeSubTab === "solved" ? "bg-white/20 text-white border-white/30" : ""}`}>{solvedReports.length}</Badge>
+        </button>
+      </div>
+
+      {/* Pending */}
+      {activeSubTab === "pending" && (
+        paginatedPending.length === 0 ? (
+          <Alert><Clock className="size-4" /><AlertDescription>কোনো পেন্ডিং ট্রাবল রিপোর্ট নেই।</AlertDescription></Alert>
+        ) : (<>
+          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-orange-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>অবস্থা</TableHead><TableHead>অ্যাকশন</TableHead></TableRow></TableHeader><TableBody>
+            {paginatedPending.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{getStatusBadge(report.status)}</TableCell><TableCell><Button variant="outline" size="sm" className="gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button></TableCell></TableRow>))}
+          </TableBody></Table></CardContent></Card>
+          <div className="md:hidden space-y-3">
+            {paginatedPending.map((report) => (<Card key={report.id}><CardContent className="p-4"><div className="flex items-start justify-between gap-2"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><BedDouble className="size-3.5 text-emerald-600" /><span className="font-semibold">রুম: {report.roomNumber}</span></div><p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p><div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground"><span>প্রতিবেদক: {report.reportedBy}</span><span>{formatDate(report.reportedAt)}</span></div></div><div>{getStatusBadge(report.status)}</div></div><Button variant="outline" size="sm" className="mt-3 w-full gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button></CardContent></Card>))}
+          </div>
+          <Pagination page={pendingPage} totalPages={totalPendingPages} onPageChange={setPendingPage} />
+        </>)
       )}
 
-      {/* Desktop table */}
-      <Card className="hidden md:block">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-emerald-50/50">
-                <TableHead>রুম</TableHead>
-                <TableHead>বিবরণ</TableHead>
-                <TableHead>প্রতিবেদক</TableHead>
-                <TableHead>তারিখ</TableHead>
-                <TableHead>অবস্থা</TableHead>
-                <TableHead>অ্যাকশন</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {reports.map((report) => (
-                <TableRow key={report.id}>
-                  <TableCell className="font-medium">
-                    {report.roomNumber}
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {report.description}
-                  </TableCell>
-                  <TableCell>{report.reportedBy}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(report.reportedAt)}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(report.status)}</TableCell>
-                  <TableCell>
-                    {report.status !== "সমাধান হয়েছে" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                        onClick={() => {
-                          setResolveReport(report);
-                          setRsNote("");
-                          setRsResolvedBy("");
-                          setRsNewItems([]);
-                          setResolveOpen(true);
-                        }}
-                      >
-                        <CheckCircle2 className="size-3" />
-                        সমস্যা সমাধান
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
-        {reports.map((report) => (
-          <Card key={report.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <BedDouble className="size-3.5 text-emerald-600" />
-                    <span className="font-semibold">
-                      রুম: {report.roomNumber}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {report.description}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    <span>প্রতিবেদক: {report.reportedBy}</span>
-                    <span>{formatDate(report.reportedAt)}</span>
-                  </div>
-                </div>
-                <div>{getStatusBadge(report.status)}</div>
-              </div>
-              {report.status !== "সমাধান হয়েছে" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 w-full gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
-                  onClick={() => {
-                    setResolveReport(report);
-                    setRsNote("");
-                    setRsResolvedBy("");
-                    setRsNewItems([]);
-                    setResolveOpen(true);
-                  }}
-                >
-                  <CheckCircle2 className="size-3" />
-                  সমস্যা সমাধান
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Solved */}
+      {activeSubTab === "solved" && (
+        paginatedSolved.length === 0 ? (
+          <Alert><CheckCircle2 className="size-4" /><AlertDescription>কোনো সমাধান হওয়া রিপোর্ট নেই।</AlertDescription></Alert>
+        ) : (<>
+          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-emerald-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>সমাধানকারী</TableHead><TableHead>সমাধানের তারিখ</TableHead></TableRow></TableHeader><TableBody>
+            {paginatedSolved.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{report.resolvedBy || "-"}</TableCell><TableCell className="text-sm text-muted-foreground">{report.resolvedAt ? formatDate(report.resolvedAt) : "-"}</TableCell></TableRow>))}
+          </TableBody></Table></CardContent></Card>
+          <div className="md:hidden space-y-3">
+            {paginatedSolved.map((report) => (<Card key={report.id}><CardContent className="p-4"><div className="flex items-center gap-2 mb-1"><BedDouble className="size-3.5 text-emerald-600" /><span className="font-semibold">রুম: {report.roomNumber}</span><span className="ml-auto">{getStatusBadge(report.status)}</span></div><p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p>{report.resolutionNote && (<p className="text-xs text-emerald-700 mt-1 bg-emerald-50 rounded px-2 py-1">সমাধান: {report.resolutionNote}</p>)}<div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground"><span>প্রতিবেদক: {report.reportedBy}</span><span>সমাধানকারী: {report.resolvedBy || "-"}</span></div><div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground"><span>তারিখ: {formatDate(report.reportedAt)}</span>{report.resolvedAt && <span>সমাধান: {formatDate(report.resolvedAt)}</span>}</div></CardContent></Card>))}
+          </div>
+          <Pagination page={solvedPage} totalPages={totalSolvedPages} onPageChange={setSolvedPage} />
+        </>)
+      )}
 
       {/* Resolve dialog */}
       <Dialog open={resolveOpen} onOpenChange={setResolveOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>সমস্যা সমাধান</DialogTitle>
-            <DialogDescription>
-              রুম {resolveReport?.roomNumber} - {resolveReport?.description}
-            </DialogDescription>
-          </DialogHeader>
-
+          <DialogHeader><DialogTitle>সমস্যা সমাধান</DialogTitle><DialogDescription>রুম {resolveReport?.roomNumber} - {resolveReport?.description}</DialogDescription></DialogHeader>
           <div className="space-y-4">
-            <div className="bg-gray-50 rounded-lg p-3 text-sm">
-              <p className="text-muted-foreground">
-                মূল সমস্যা: {resolveReport?.description}
-              </p>
-              <p className="text-muted-foreground">
-                প্রতিবেদক: {resolveReport?.reportedBy} • তারিখ:{" "}
-                {resolveReport && formatDate(resolveReport.reportedAt)}
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>সমাধানকারীর নাম *</Label>
-              <Input
-                placeholder="যিনি সমাধান করেছেন"
-                value={rsResolvedBy}
-                onChange={(e) => setRsResolvedBy(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>সমাধানের বিবরণ</Label>
-              <Textarea
-                placeholder="সমস্যা কীভাবে সমাধান করা হয়েছে..."
-                value={rsNote}
-                onChange={(e) => setRsNote(e.target.value)}
-                rows={3}
-              />
-            </div>
-
-            {/* New items added during repair */}
+            <div className="bg-gray-50 rounded-lg p-3 text-sm"><p className="text-muted-foreground">মূল সমস্যা: {resolveReport?.description}</p><p className="text-muted-foreground">প্রতিবেদক: {resolveReport?.reportedBy} • তারিখ: {resolveReport && formatDate(resolveReport.reportedAt)}</p></div>
+            <div className="space-y-1.5"><Label>সমাধানকারীর নাম *</Label><Input placeholder="যিনি সমাধান করেছেন" value={rsResolvedBy} onChange={(e) => setRsResolvedBy(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>সমাধানের বিবরণ</Label><Textarea placeholder="সমস্যা কীভাবে সমাধান করা হয়েছে..." value={rsNote} onChange={(e) => setRsNote(e.target.value)} rows={3} /></div>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>নতুন মালামাল যোগ (যদি মেরামতে নতুন কিছু যোগ হয়)</Label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1 text-xs"
-                  onClick={addRsItem}
-                >
-                  <Plus className="size-3" />
-                  আইটেম
-                </Button>
-              </div>
-
-              {rsNewItems.length > 0 && (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {rsNewItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="grid grid-cols-[1fr_70px_90px_1fr_32px] gap-2 items-end"
-                    >
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            নাম
-                          </span>
-                        )}
-                        <Input
-                          placeholder="নাম"
-                          value={item.itemName}
-                          onChange={(e) =>
-                            updateRsItem(idx, "itemName", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            পরিমাণ
-                          </span>
-                        )}
-                        <Input
-                          placeholder="১"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            updateRsItem(idx, "quantity", e.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            অবস্থা
-                          </span>
-                        )}
-                        <Select
-                          value={item.condition}
-                          onValueChange={(v) =>
-                            updateRsItem(idx, "condition", v)
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="ভালো">ভালো</SelectItem>
-                            <SelectItem value="মাঝারি">মাঝারি</SelectItem>
-                            <SelectItem value="খারাপ">খারাপ</SelectItem>
-                            <SelectItem value="নস্ট">নস্ট</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        {idx === 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            নোট
-                          </span>
-                        )}
-                        <Input
-                          placeholder="নোট"
-                          value={item.note}
-                          onChange={(e) =>
-                            updateRsItem(idx, "note", e.target.value)
-                          }
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0"
-                        onClick={() => removeRsItem(idx)}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {rsNewItems.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  মেরামতে নতুন কোনো মালামাল যোগ হলে উপরে &quot;আইটেম&quot;
-                  বাটনে ক্লিক করুন
-                </p>
-              )}
+              <div className="flex items-center justify-between"><Label>নতুন মালামাল যোগ (যদি মেরামতে নতুন কিছু যোগ হয়)</Label><Button variant="outline" size="sm" className="gap-1 text-xs" onClick={addRsItem}><Plus className="size-3" />আইটেম</Button></div>
+              {rsNewItems.length > 0 ? (<div className="space-y-2 max-h-60 overflow-y-auto">{rsNewItems.map((item, idx) => (<div key={idx} className="grid grid-cols-[1fr_70px_90px_1fr_32px] gap-2 items-end"><div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">নাম</span>}<Input placeholder="নাম" value={item.itemName} onChange={(e) => updateRsItem(idx, "itemName", e.target.value)} /></div><div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">পরিমাণ</span>}<Input placeholder="১" value={item.quantity} onChange={(e) => updateRsItem(idx, "quantity", e.target.value)} /></div><div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">অবস্থা</span>}<Select value={item.condition} onValueChange={(v) => updateRsItem(idx, "condition", v)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div><div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">নোট</span>}<Input placeholder="নোট" value={item.note} onChange={(e) => updateRsItem(idx, "note", e.target.value)} /></div><Button variant="ghost" size="sm" className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0" onClick={() => removeRsItem(idx)}><X className="size-4" /></Button></div>))}</div>) : (<p className="text-xs text-muted-foreground">মেরামতে নতুন কোনো মালামাল যোগ হলে উপরে &quot;আইটেম&quot; বাটনে ক্লিক করুন</p>)}
             </div>
           </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResolveOpen(false)}>
-              বাতিল
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleResolve}
-            >
-              সমাধান নিশ্চিত করুন
-            </Button>
-          </DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => setResolveOpen(false)}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleResolve}>সমাধান নিশ্চিত করুন</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
