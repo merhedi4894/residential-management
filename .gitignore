@@ -30,8 +30,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (keep .env.example, ignore everything else)
+.env
+.env.local
+.env.production
+.env.development
 
 # vercel
 .vercel
@@ -44,11 +47,17 @@ local-*
 .claude
 .z-ai-config
 *.log
+nohup.out
 dev.log
 dev.out.log
 test
 prompt
 
 server.log
+server_*.log
+keep-alive.js
+start-server.sh
 # Skills directory
 /skills/
+# Turso local DB
+db/*.db

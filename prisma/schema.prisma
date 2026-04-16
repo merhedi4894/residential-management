@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "libsql"
+  url       = env("DATABASE_URL")
 }
 
 // Buildings in the residential area

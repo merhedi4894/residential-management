@@ -95,3 +95,24 @@ Stage Summary:
 - Fix: Regenerated Prisma client + rebuilt production
 - All guest API endpoints (GET, POST, PATCH, DELETE) verified working
 - Server running stable on standalone production build
+---
+Task ID: 2
+Agent: Main Agent
+Task: Prepare project for Turso + Vercel deployment and create guide
+
+Work Log:
+- Read all project configuration files (next.config.ts, package.json, .env, prisma/schema.prisma, db.ts, middleware.ts)
+- Updated prisma/schema.prisma: kept provider=sqlite (required for Prisma CLI), added directUrl support
+- Updated src/lib/db.ts: added Turso/libsql adapter support with @prisma/adapter-libsql, auto-detects libsql:// URL
+- Verified cookie secure flags: all auth routes already use secure: process.env.NODE_ENV === 'production'
+- Cleaned up next.config.ts: removed output: 'standalone' for Vercel compatibility
+- Cleaned up package.json: removed deprecated prisma.seed config, kept postinstall for prisma generate
+- Updated .env.example with Turso variable descriptions
+- Fixed @prisma/adapter-libsql version compatibility (downgraded to ^6.11.0 to match prisma@6.11.1)
+- Built and verified: npx prisma generate + npx prisma db push + npx next build all successful
+- Created comprehensive 7-page Bengali deployment guide PDF (turso-vercel-deployment-guide.pdf)
+
+Stage Summary:
+- All code changes complete for Turso + Vercel deployment
+- Build verified successful
+- Deployment guide PDF generated at /home/z/my-project/download/turso-vercel-deployment-guide.pdf

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 
     response.cookies.set('session_token', sessionToken, {
       httpOnly: true,
-      secure: false, // Local system, no HTTPS
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
