@@ -6,39 +6,33 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-function createPrismaClient() {
+function createPrismaClient(): PrismaClient {
   const databaseUrl = process.env.DATABASE_URL || ''
 
-  // Turso (libsql) connection — used when DATABASE_URL starts with libsql://
+  // Turso (libsql) connection — only when DATABASE_URL starts with libsql://
   if (databaseUrl.startsWith('libsql://')) {
-    const libsql = createClient({
-      url: databaseUrl,
-    })
-    const adapter = new PrismaLibSQL(libsql)
-    return new PrismaClient({
-      adapter,
-      log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-    })
+    try {
+      const libsql = createClient({ url: databaseUrl })
+      const adapter = new PrismaLibSQL(libsql)
+      return new PrismaClient({
+        adapter,
+        log: ['error'],
+      })
+    } catch (err) {
+      // Build-time fallback: ignore connection errors during static generation
+      console.warn('[db] Turso connection failed during build, using fallback')
+    }
   }
 
-  // Local SQLite fallback — used when DATABASE_URL starts with file:
+  // SQLite fallback — safe for build-time and local dev
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
 }
 
-function getDbClient(): PrismaClient {
-  // During build time, DATABASE_URL might not be available
-  if (!process.env.DATABASE_URL && process.env.NODE_ENV === 'production') {
-    // Return a minimal client that won't fail during build/static generation
-    return new PrismaClient({
-      log: ['error'],
-      datasourceUrl: 'file:./dev.db',
-    })
-  }
-  return globalForPrisma.prisma ?? createPrismaClient()
+export const db: PrismaClient =
+  globalForPrisma.prisma ?? createPrismaClient()
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db
 }
-
-export const db = getDbClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
