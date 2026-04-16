@@ -73,3 +73,25 @@ Stage Summary:
 - Route protection via middleware (cookie-based)
 - OverviewTab now has clean separation: tenant view shows only tenants, inventory view shows only inventory in very compact rows
 - All files saved to /home/z/my-project/
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix guest tab loading issue - "গেস্ট লোড করতে সমস্যা হয়েছে"
+
+Work Log:
+- Investigated the guest API error by reading server logs
+- Found root cause: `TypeError: Cannot read properties of undefined (reading 'findMany')` on `db.guest.findMany()` in `/api/guests/route.ts`
+- The Prisma client was stale - it didn't include the `Guest` model even though the model existed in `schema.prisma`
+- Ran `npx prisma generate` to regenerate the Prisma client
+- Disabled Prisma query logging in production (`log: process.env.NODE_ENV === 'development' ? ['query'] : []`) to prevent log flooding
+- Rebuilt production build with `npx next build`
+- Verified GET /api/guests returns 200 with empty array
+- Verified POST /api/guests creates a new guest record successfully (200 response)
+- Cleaned up test data
+- Restarted standalone production server on port 3000
+
+Stage Summary:
+- Root cause: Stale Prisma client didn't include Guest model
+- Fix: Regenerated Prisma client + rebuilt production
+- All guest API endpoints (GET, POST, PATCH, DELETE) verified working
+- Server running stable on standalone production build
