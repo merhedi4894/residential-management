@@ -45,7 +45,20 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
+        <div className="min-h-screen flex flex-col">
+          <main className="flex-1">{children}</main>
+          <footer className="border-t pt-6 pb-8 text-center mt-auto">
+            <p className="text-sm text-muted-foreground">
+              আবাসিক ম্যানেজমেন্ট @২০২৬
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Md. Mehedi Hasan
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Caretaker, EGB PLC.
+            </p>
+          </footer>
+        </div>
         <Toaster />
       </body>
     </html>

@@ -379,17 +379,6 @@ export default function HomePage() {
         <BuildingsContextWrapper>
           <MainTabs />
         </BuildingsContextWrapper>
-        <footer className="mt-12 border-t pt-6 pb-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            আবাসিক ম্যানেজমেন্ট @২০২৬
-          </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            Md. Mehedi Hasan
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Caretaker, EGB PLC.
-          </p>
-        </footer>
       </div>
 
       {/* Change Password Dialog */}

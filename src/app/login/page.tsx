@@ -546,9 +546,6 @@ export default function LoginPage() {
           </Card>
         )}
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          আবাসিক ম্যানেজমেন্ট &copy; {new Date().getFullYear()}
-        </p>
       </div>
     </div>
   );
