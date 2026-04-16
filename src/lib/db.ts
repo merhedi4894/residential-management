@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaLibSQL } from '@prisma/adapter-libsql'
-import { createClient } from '@libsql/client'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -11,8 +10,8 @@ function createPrismaClient(): PrismaClient {
 
   if (databaseUrl.startsWith('libsql://')) {
     try {
-      const libsql = createClient({ url: databaseUrl })
-      const adapter = new PrismaLibSQL(libsql)
+      // Pass config object (not pre-created client) to adapter
+      const adapter = new PrismaLibSQL({ url: databaseUrl })
       return new PrismaClient({
         adapter,
         log: ['error'],
