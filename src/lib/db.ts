@@ -27,7 +27,18 @@ function createPrismaClient() {
   })
 }
 
-export const db =
-  globalForPrisma.prisma ?? createPrismaClient()
+function getDbClient(): PrismaClient {
+  // During build time, DATABASE_URL might not be available
+  if (!process.env.DATABASE_URL && process.env.NODE_ENV === 'production') {
+    // Return a minimal client that won't fail during build/static generation
+    return new PrismaClient({
+      log: ['error'],
+      datasourceUrl: 'file:./dev.db',
+    })
+  }
+  return globalForPrisma.prisma ?? createPrismaClient()
+}
+
+export const db = getDbClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
