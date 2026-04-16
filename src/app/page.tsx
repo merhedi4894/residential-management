@@ -209,6 +209,43 @@ function getStatusBadge(status: string) {
 
 const uid = () => Math.random().toString(36).substring(2, 9);
 
+// ── Buildings Context (shared data for performance) ─────────────────────
+
+const BuildingsContext = React.createContext<{
+  buildings: Building[];
+  reloadBuildings: () => void;
+}>({ buildings: [], reloadBuildings: () => {} });
+
+function useBuildingsContext() {
+  return React.useContext(BuildingsContext);
+}
+
+function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
+  const [buildings, setBuildings] = useState<Building[]>([]);
+
+  const loadBuildings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/buildings");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setBuildings(data);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    loadBuildings();
+    const handler = () => loadBuildings();
+    window.addEventListener("dashboard-data-changed", handler);
+    return () => window.removeEventListener("dashboard-data-changed", handler);
+  }, [loadBuildings]);
+
+  return (
+    <BuildingsContext.Provider value={{ buildings, reloadBuildings: loadBuildings }}>
+      {children}
+    </BuildingsContext.Provider>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────
 
 export default function HomePage() {
@@ -319,7 +356,9 @@ export default function HomePage() {
       <Toaster position="top-right" richColors />
       <div className="container mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 flex-1">
         <DashboardHeader user={user} onLogout={handleLogout} onChangePassword={() => { setCurrentPass(""); setNewPass(""); setChangePassOpen(true); }} />
-        <MainTabs />
+        <BuildingsContextWrapper>
+          <MainTabs />
+        </BuildingsContextWrapper>
         <footer className="mt-12 border-t pt-6 pb-8 text-center">
           <p className="text-sm text-muted-foreground">
             আবাসিক ম্যানেজমেন্ট @২০২৬
@@ -370,39 +409,21 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
   onLogout: () => void;
   onChangePassword: () => void;
 }) {
-  const [buildings, setBuildings] = useState<Building[]>([]);
-  const [totalRooms, setTotalRooms] = useState(0);
-  const [activeTenants, setActiveTenants] = useState(0);
+  const { buildings } = useBuildingsContext();
 
-  const loadCounts = useCallback(() => {
-    fetch("/api/buildings")
-      .then((r) => r.json())
-      .then((data) => {
-        setBuildings(data);
-        let rooms = 0;
-        let tenants = 0;
-        data.forEach((b: Building) => {
-          b.floors?.forEach((f) => {
-            rooms += f.rooms?.length || 0;
-            f.rooms?.forEach((r) => {
-              tenants += r.tenants?.length || 0;
-            });
-          });
+  const { totalRooms, activeTenants } = React.useMemo(() => {
+    let rooms = 0;
+    let tenants = 0;
+    buildings.forEach((b) => {
+      b.floors?.forEach((f) => {
+        rooms += f.rooms?.length || 0;
+        f.rooms?.forEach((r) => {
+          tenants += r.tenants?.length || 0;
         });
-        setTotalRooms(rooms);
-        setActiveTenants(tenants);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    loadCounts();
-    const handleDataChange = () => loadCounts();
-    window.addEventListener("dashboard-data-changed", handleDataChange);
-    return () => {
-      window.removeEventListener("dashboard-data-changed", handleDataChange);
-    };
-  }, [loadCounts]);
+      });
+    });
+    return { totalRooms: rooms, activeTenants: tenants };
+  }, [buildings]);
 
   return (
     <header className="mb-8">
@@ -523,8 +544,7 @@ function MainTabs() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BuildingsTab() {
-  const [buildings, setBuildings] = useState<Building[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { buildings, reloadBuildings } = useBuildingsContext();
   const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(
     new Set()
   );
@@ -538,24 +558,10 @@ function BuildingsTab() {
   const [addRoomNumber, setAddRoomNumber] = useState("");
   const [addRoomOpen, setAddRoomOpen] = useState(false);
 
-  const loadBuildings = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/buildings");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setBuildings(data);
-      window.dispatchEvent(new Event("dashboard-data-changed"));
-    } catch {
-      toast.error("বিল্ডিং লোড করতে সমস্যা হয়েছে");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadBuildings();
-  }, [loadBuildings]);
+  const refreshData = useCallback(() => {
+    window.dispatchEvent(new Event("dashboard-data-changed"));
+    reloadBuildings();
+  }, [reloadBuildings]);
 
   const toggleBuilding = (id: string) => {
     setExpandedBuildings((prev) => {
@@ -585,7 +591,7 @@ function BuildingsTab() {
       setNewBuildingName("");
       setNewBuildingFloors("");
       setAddBuildingOpen(false);
-      loadBuildings();
+      refreshData();
     } catch {
       toast.error("বিল্ডিং তৈরি করতে সমস্যা হয়েছে");
     }
@@ -600,7 +606,7 @@ function BuildingsTab() {
       });
       if (!res.ok) throw new Error();
       toast.success("বিল্ডিং মুছে ফেলা হয়েছে");
-      loadBuildings();
+      refreshData();
     } catch {
       toast.error("বিল্ডিং মুছে ফেলতে সমস্যা হয়েছে");
     }
@@ -625,7 +631,7 @@ function BuildingsTab() {
       setAddRoomNumber("");
       setAddRoomFloorId("");
       setAddRoomOpen(false);
-      loadBuildings();
+      refreshData();
     } catch {
       toast.error("রুম তৈরি করতে সমস্যা হয়েছে");
     }
@@ -640,19 +646,11 @@ function BuildingsTab() {
       });
       if (!res.ok) throw new Error();
       toast.success("রুম মুছে ফেলা হয়েছে");
-      loadBuildings();
+      refreshData();
     } catch {
       toast.error("রুম মুছে ফেলতে সমস্যা হয়েছে");
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -948,7 +946,7 @@ function BuildingsTab() {
 
 function TenantsTab() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [buildings, setBuildings] = useState<Building[]>([]);
+  const { buildings } = useBuildingsContext();
   const [loading, setLoading] = useState(true);
   const [showGuestView, setShowGuestView] = useState(false);
 
@@ -974,13 +972,9 @@ function TenantsTab() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [tRes, bRes] = await Promise.all([
-        fetch("/api/tenants"),
-        fetch("/api/buildings"),
-      ]);
-      if (!tRes.ok || !bRes.ok) throw new Error();
+      const tRes = await fetch("/api/tenants");
+      if (!tRes.ok) throw new Error();
       setTenants(await tRes.json());
-      setBuildings(await bRes.json());
       window.dispatchEvent(new Event("dashboard-data-changed"));
     } catch {
       toast.error("তথ্য লোড করতে সমস্যা হয়েছে");
@@ -1622,7 +1616,7 @@ const BENGALI_MONTHS = [
 
 function TroublesTab() {
   const [reports, setReports] = useState<TroubleReport[]>([]);
-  const [buildings, setBuildings] = useState<Building[]>([]);
+  const { buildings } = useBuildingsContext();
   const [loading, setLoading] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<"pending" | "solved">("pending");
   const [searchMonth, setSearchMonth] = useState("");
@@ -1651,11 +1645,10 @@ function TroublesTab() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [tRes, bRes] = await Promise.all([fetch("/api/troubles"), fetch("/api/buildings")]);
-      if (!tRes.ok || !bRes.ok) throw new Error();
+      const tRes = await fetch("/api/troubles");
+      if (!tRes.ok) throw new Error();
       const allReports: TroubleReport[] = await tRes.json();
       setReports(allReports);
-      setBuildings(await bRes.json());
       const years = [...new Set(allReports.map((r) => new Date(r.reportedAt).getFullYear()))].sort((a, b) => b - a);
       setAvailableYears(years);
     } catch {
@@ -1779,10 +1772,10 @@ function TroublesTab() {
       {/* Sub-tabs */}
       <div className="flex bg-gray-100 rounded-lg p-0.5">
         <button type="button" className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === "pending" ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setActiveSubTab("pending")}>
-          <Clock className="size-3.5" />পেন্ডিং + চলমান<Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${activeSubTab === "pending" ? "bg-white/20 text-white border-white/30" : ""}`}>{pendingReports.length}</Badge>
+          <Clock className="size-3.5" />কাজ চলমান<Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${activeSubTab === "pending" ? "bg-white/20 text-white border-white/30" : ""}`}>{pendingReports.length}</Badge>
         </button>
         <button type="button" className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === "solved" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setActiveSubTab("solved")}>
-          <CheckCircle2 className="size-3.5" />সমাধান হয়েছে<Badge variant="secondary" className={`text-[10px] h-4 px-1.5 ${activeSubTab === "solved" ? "bg-white/20 text-white border-white/30" : ""}`}>{solvedReports.length}</Badge>
+          <CheckCircle2 className="size-3.5" />সমাধান হয়েছে
         </button>
       </div>
 
@@ -1891,15 +1884,16 @@ function getConditionBadge(condition: string) {
 }
 
 function OverviewTab() {
-  const [buildings, setBuildings] = useState<Building[]>([]);
+  const { buildings } = useBuildingsContext();
   const [buildingId, setBuildingId] = useState("");
   const [floorId, setFloorId] = useState("");
   const [roomId, setRoomId] = useState("");
   const [searched, setSearched] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [data, setData] = useState<RoomWiseData | null>(null);
+  const [overviewSubTab, setOverviewSubTab] = useState<"tenants" | "inventory">("tenants");
   const [prevPage, setPrevPage] = useState(1);
-  const prevPerPage = 5;
+  const prevPerPage = 10;
 
   const [editTenantOpen, setEditTenantOpen] = useState(false);
   const [editTenantData, setEditTenantData] = useState<{ id: string; name: string; phone: string; } | null>(null);
@@ -1914,11 +1908,15 @@ function OverviewTab() {
   const [vacateOpen, setVacateOpen] = useState(false);
   const [vacateItems, setVacateItems] = useState<VacateInventoryItem[]>([]);
   const [vacateLoading, setVacateLoading] = useState(false);
+  const [editingVacateIdx, setEditingVacateIdx] = useState<number | null>(null);
   const [expandedPrevTenant, setExpandedPrevTenant] = useState<string | null>(null);
 
-  useEffect(() => { fetch("/api/buildings").then((r) => r.json()).then(setBuildings).catch(() => {}); }, []);
   const selectedBuilding = buildings.find((b) => b.id === buildingId);
   const selectedFloor = selectedBuilding?.floors?.find((f) => f.id === floorId);
+
+  // Derive building name and floor number for hierarchy display
+  const selectedBuildingName = selectedBuilding?.name || "";
+  const selectedFloorNumber = selectedFloor?.floorNumber || null;
 
   const handleSearch = async () => {
     if (!roomId) { toast.error("বিল্ডিং এবং রুম নির্বাচন করুন"); return; }
@@ -1935,6 +1933,7 @@ function OverviewTab() {
     if (!data?.currentTenant) return;
     const items: VacateInventoryItem[] = data.currentInventory.map((inv) => ({ id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note }));
     setVacateItems(items.length > 0 ? items : [{ itemName: "", quantity: 1, condition: "ভালো" }]);
+    setEditingVacateIdx(null);
     setVacateOpen(true);
   };
   const updateVacateItem = (idx: number, field: keyof VacateInventoryItem, value: string | number) => { setVacateItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))); };
@@ -1972,15 +1971,39 @@ function OverviewTab() {
           <div className="space-y-1.5"><Label>তলা নির্বাচন</Label><Select value={floorId} onValueChange={(v) => { setFloorId(v); setRoomId(""); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId} onValueChange={(v) => { setRoomId(v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>))}</SelectContent></Select></div>
         </div>
-        <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || !roomId}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            <button type="button" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${overviewSubTab === "tenants" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setOverviewSubTab("tenants")}>
+              <Users className="size-3.5" />ভাড়াটে
+            </button>
+            <button type="button" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${overviewSubTab === "inventory" ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setOverviewSubTab("inventory")}>
+              <Package className="size-3.5" />মালামাল
+            </button>
+          </div>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || !roomId}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
+        </div>
       </CardContent></Card>
       {!searched && (<Alert><Search className="size-4" /><AlertDescription>বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন</AlertDescription></Alert>)}
 
       {searched && data && (
         <div className="space-y-6">
-          <div className="bg-white rounded-lg border px-4 py-3"><div className="flex items-center gap-3"><div className="flex items-center justify-center size-8 rounded-lg bg-emerald-100 text-emerald-700"><BedDouble className="size-4" /></div><div className="flex-1 min-w-0"><p className="font-semibold">রুম: {data.roomNumber}</p><p className="text-xs text-muted-foreground">বর্তমান: {data.currentTenant ? data.currentTenant.name : "কেউ নেই"} &bull; আগে: {data.previousTenants.length} জন &bull; মালামাল: {data.currentInventory.length} টি</p></div></div></div>
+          <div className="bg-white rounded-lg border px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center size-8 rounded-lg bg-emerald-100 text-emerald-700">
+                <BedDouble className="size-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">রুম: {data.roomNumber}</p>
+                <p className="text-xs text-muted-foreground">
+                  বিল্ডিং: {selectedBuildingName}
+                  {selectedFloorNumber !== null && ` • তলা: ${toBanglaNumber(selectedFloorNumber)} তলা`}
+                </p>
+              </div>
+            </div>
+          </div>
 
-          {/* ভাড়াটে তালিকা */}
+          {/* ভাড়াটে তালিকা — only when tenants sub-tab selected */}
+          {overviewSubTab === "tenants" && (
           <div>
             <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2 text-emerald-700"><Users className="size-3.5" /> ভাড়াটে তালিকা</h3>
             {data.currentTenant ? (
@@ -2033,12 +2056,15 @@ function OverviewTab() {
               </div>
             )}
           </div>
+          )}
 
-          {/* মালামাল তালিকা */}
+          {/* মালামাল তালিকা — only when inventory sub-tab selected */}
+          {overviewSubTab === "inventory" && (
           <div>
             <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Package className="size-3.5" /> মালামাল তালিকা<Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.currentInventory.length}</Badge></h3><Button size="sm" className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-2" onClick={() => { setAddInvTenantId(data.currentTenant?.id || ""); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(true); }}><Plus className="size-2.5" />যোগ</Button></div>
             {data.currentInventory.length === 0 ? (<p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>) : (<div className="bg-white border rounded-lg overflow-hidden divide-y">{data.currentInventory.map((item) => (<div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group"><span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span><span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span><div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}><Edit3 className="size-2.5" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="size-2.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></div>))}</div>)}
           </div>
+          )}
         </div>
       )}
 
@@ -2048,7 +2074,7 @@ function OverviewTab() {
       <Dialog open={addInvOpen} onOpenChange={setAddInvOpen}><DialogContent><DialogHeader><DialogTitle>নতুন মালামাল যোগ করুন</DialogTitle><DialogDescription>রুম {data?.roomNumber} এ নতুন মালামাল যোগ করুন</DialogDescription></DialogHeader><div className="space-y-4"><div className="space-y-1.5"><Label>মালামালের নাম *</Label><Input placeholder="যেমন: ফ্যান" value={addInvName} onChange={(e) => setAddInvName(e.target.value)} /></div><div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><Label>পরিমাণ</Label><Input type="number" min={1} value={addInvQty} onChange={(e) => setAddInvQty(e.target.value)} /></div><div className="space-y-1.5"><Label>অবস্থা</Label><Select value={addInvCondition} onValueChange={setAddInvCondition}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div></div><div className="space-y-1.5"><Label>নোট (ঐচ্ছিক)</Label><Textarea placeholder="কোনো বিশেষ নোট" value={addInvNote} onChange={(e) => setAddInvNote(e.target.value)} rows={2} /></div></div><DialogFooter><Button variant="outline" onClick={() => setAddInvOpen(false)}>বাতিল</Button><Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAddInventory}>যোগ করুন</Button></DialogFooter></DialogContent></Dialog>
 
       {/* Vacate Dialog */}
-      <Dialog open={vacateOpen} onOpenChange={setVacateOpen}><DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>ভাড়াটে রুম ছেড়ে দিন</DialogTitle><DialogDescription>{data?.currentTenant?.name} রুম ছেড়ে দিচ্ছেন। মালামালের অবস্থা যাচাই করুন।</DialogDescription></DialogHeader><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">রুম নম্বর</p><p className="font-semibold">{data?.roomNumber}</p></div><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">ভাড়াটে</p><p className="font-semibold">{data?.currentTenant?.name}</p></div></div><div><div className="flex items-center justify-between mb-2"><Label>মালামালের তালিকা</Label><Button variant="outline" size="sm" className="gap-1 text-xs" onClick={addVacateItem}><Plus className="size-3" />আইটেম যোগ</Button></div><div className="space-y-2 max-h-72 overflow-y-auto">{vacateItems.map((item, idx) => (<div key={idx} className="grid grid-cols-[1fr_70px_100px_100px_32px] gap-2 items-end bg-gray-50 rounded-lg p-2"><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">নাম</span>}<Input className="h-8 text-xs" value={item.itemName} onChange={(e) => updateVacateItem(idx, "itemName", e.target.value)} placeholder="মালামালের নাম" /></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">পরিমাণ</span>}<Input className="h-8 text-xs" type="number" min={1} value={item.quantity} onChange={(e) => updateVacateItem(idx, "quantity", parseInt(e.target.value) || 1)} /></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">অবস্থা</span>}<Select value={item.condition} onValueChange={(v) => updateVacateItem(idx, "condition", v)}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select></div><div>{idx === 0 && <span className="text-[10px] text-muted-foreground">নোট</span>}<Input className="h-8 text-xs" value={item.note || ""} onChange={(e) => updateVacateItem(idx, "note", e.target.value)} placeholder="নোট" /></div><Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0" onClick={() => removeVacateItem(idx)} disabled={vacateItems.length <= 1}><X className="size-3.5" /></Button></div>))}</div></div></div><DialogFooter><Button variant="outline" onClick={() => setVacateOpen(false)}>বাতিল</Button><Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleVacate} disabled={vacateLoading}>{vacateLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : null}নিশ্চিত করুন — রুম ছেড়ে দিন</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={vacateOpen} onOpenChange={setVacateOpen}><DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>ভাড়াটে রুম ছেড়ে দিন</DialogTitle><DialogDescription>{data?.currentTenant?.name} রুম ছেড়ে দিচ্ছেন। মালামালের অবস্থা যাচাই করুন।</DialogDescription></DialogHeader><div className="space-y-4"><div className="grid grid-cols-2 gap-3"><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">রুম নম্বর</p><p className="font-semibold">{data?.roomNumber}</p></div><div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-muted-foreground">ভাড়াটে</p><p className="font-semibold">{data?.currentTenant?.name}</p></div></div><div><div className="flex items-center justify-between mb-2"><Label>মালামালের তালিকা</Label><Button variant="outline" size="sm" className="gap-1 text-xs" onClick={addVacateItem}><Plus className="size-3" />আইটেম যোগ</Button></div><div className="space-y-2 max-h-72 overflow-y-auto">{vacateItems.map((item, idx) => (<div key={idx} className={`rounded-lg border p-2 ${editingVacateIdx === idx ? "bg-emerald-50/50 border-emerald-200" : "bg-gray-50"}`}><div className="flex items-center gap-2">{editingVacateIdx === idx ? (<><div className="flex-1 grid grid-cols-[1fr_70px_100px_100px] gap-2 items-end">{idx === 0 && <div className="col-span-4 grid grid-cols-[1fr_70px_100px_100px] gap-2"><span className="text-[10px] text-muted-foreground">নাম</span><span className="text-[10px] text-muted-foreground">পরিমাণ</span><span className="text-[10px] text-muted-foreground">অবস্থা</span><span className="text-[10px] text-muted-foreground">নোট</span></div>}<Input className="h-8 text-xs" value={item.itemName} onChange={(e) => updateVacateItem(idx, "itemName", e.target.value)} placeholder="মালামালের নাম" /><Input className="h-8 text-xs" type="number" min={1} value={item.quantity} onChange={(e) => updateVacateItem(idx, "quantity", parseInt(e.target.value) || 1)} /><Select value={item.condition} onValueChange={(v) => updateVacateItem(idx, "condition", v)}><SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent></Select><Input className="h-8 text-xs" value={item.note || ""} onChange={(e) => updateVacateItem(idx, "note", e.target.value)} placeholder="নোট" /></div><Button variant="ghost" size="sm" className="size-7 p-0 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 shrink-0" onClick={() => setEditingVacateIdx(null)}><Edit3 className="size-3.5" /></Button></>) : (<><div className="flex-1 flex items-center gap-3 text-sm min-w-0"><span className="font-medium truncate min-w-0 flex-1">{item.itemName || "—"}</span><span className="text-xs text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span>{item.note && <span className="text-[10px] text-muted-foreground truncate shrink-0 hidden sm:inline">({item.note})</span>}</div><div className="flex gap-0.5 shrink-0"><Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => setEditingVacateIdx(idx)}><Edit3 className="size-3.5" /></Button><Button variant="ghost" size="sm" className="size-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => removeVacateItem(idx)} disabled={vacateItems.length <= 1}><Trash2 className="size-3.5" /></Button></div></>)}</div></div>))}</div></div></div><DialogFooter><Button variant="outline" onClick={() => setVacateOpen(false)}>বাতিল</Button><Button className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleVacate} disabled={vacateLoading}>{vacateLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : null}নিশ্চিত করুন — রুম ছেড়ে দিন</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }
