@@ -584,11 +584,81 @@ function BuildingsTab() {
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [deletingRoom, setDeletingRoom] = useState(false);
 
+  // Edit building dialog
+  const [editBuildingOpen, setEditBuildingOpen] = useState(false);
+  const [editBuildingId, setEditBuildingId] = useState("");
+  const [editBuildingName, setEditBuildingName] = useState("");
+  const [updatingBuilding, setUpdatingBuilding] = useState(false);
+
+  // Edit room dialog
+  const [editRoomOpen, setEditRoomOpen] = useState(false);
+  const [editRoomId, setEditRoomId] = useState("");
+  const [editRoomNumber, setEditRoomNumber] = useState("");
+  const [updatingRoom, setUpdatingRoom] = useState(false);
+
   // Delete building password dialog
   const [deleteBuildingId, setDeleteBuildingId] = useState("");
   const [deleteBuildingName, setDeleteBuildingName] = useState("");
   const [deletePassOpen, setDeletePassOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+
+  const handleEditBuilding = async () => {
+    if (!editBuildingName.trim()) {
+      toast.error("বিল্ডিং এর নাম দিন");
+      return;
+    }
+    setUpdatingBuilding(true);
+    try {
+      const res = await fetch("/api/buildings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editBuildingId, name: editBuildingName.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("বিল্ডিং এর নাম আপডেট হয়েছে");
+      setEditBuildingOpen(false);
+      refreshData();
+    } catch {
+      toast.error("বিল্ডিং আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setUpdatingBuilding(false);
+    }
+  };
+
+  const openEditBuildingDialog = (buildingId: string, buildingName: string) => {
+    setEditBuildingId(buildingId);
+    setEditBuildingName(buildingName);
+    setEditBuildingOpen(true);
+  };
+
+  const handleEditRoom = async () => {
+    if (!editRoomNumber.trim()) {
+      toast.error("রুম নম্বর দিন");
+      return;
+    }
+    setUpdatingRoom(true);
+    try {
+      const res = await fetch("/api/rooms", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editRoomId, roomNumber: editRoomNumber.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("রুম নম্বর আপডেট হয়েছে");
+      setEditRoomOpen(false);
+      refreshData();
+    } catch {
+      toast.error("রুম আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setUpdatingRoom(false);
+    }
+  };
+
+  const openEditRoomDialog = (roomId: string, roomNumber: string) => {
+    setEditRoomId(roomId);
+    setEditRoomNumber(roomNumber);
+    setEditRoomOpen(true);
+  };
 
   const refreshData = useCallback(() => {
     window.dispatchEvent(new Event("dashboard-data-changed"));
@@ -829,6 +899,82 @@ function BuildingsTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Edit Building Dialog */}
+        <Dialog open={editBuildingOpen} onOpenChange={setEditBuildingOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <Edit3 className="size-5" />
+                বিল্ডিং এর নাম পরিবর্তন করুন
+              </DialogTitle>
+              <DialogDescription>
+                বিল্ডিং এর নতুন নাম লিখুন
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="editBname">বিল্ডিং এর নাম</Label>
+                <Input
+                  id="editBname"
+                  placeholder="নতুন নাম লিখুন"
+                  value={editBuildingName}
+                  onChange={(e) => setEditBuildingName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEditBuilding(); }}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditBuildingOpen(false)}>বাতিল</Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleEditBuilding}
+                disabled={updatingBuilding || !editBuildingName.trim()}
+              >
+                {updatingBuilding ? "আপডেট হচ্ছে..." : "আপডেট করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Room Dialog */}
+        <Dialog open={editRoomOpen} onOpenChange={setEditRoomOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <Edit3 className="size-5" />
+                রুম নম্বর পরিবর্তন করুন
+              </DialogTitle>
+              <DialogDescription>
+                রুম এর নতুন নম্বর লিখুন
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="editRoom">রুম নম্বর</Label>
+                <Input
+                  id="editRoom"
+                  placeholder="নতুন রুম নম্বর লিখুন"
+                  value={editRoomNumber}
+                  onChange={(e) => setEditRoomNumber(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEditRoom(); }}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditRoomOpen(false)}>বাতিল</Button>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={handleEditRoom}
+                disabled={updatingRoom || !editRoomNumber.trim()}
+              >
+                {updatingRoom ? "আপডেট হচ্ছে..." : "আপডেট করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {buildings.length === 0 && (
@@ -867,6 +1013,14 @@ function BuildingsTab() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name); }}
+                    >
+                      <Edit3 className="size-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -988,6 +1142,14 @@ function BuildingsTab() {
                             {room.tenants?.length > 0 && (
                               <span className="size-2 rounded-full bg-emerald-500" />
                             )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-6 p-0 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-600 hover:bg-blue-50"
+                              onClick={() => openEditRoomDialog(room.id, room.roomNumber)}
+                            >
+                              <Edit3 className="size-3" />
+                            </Button>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button

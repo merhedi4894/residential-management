@@ -17,6 +17,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH update room number
+export async function PATCH(req: NextRequest) {
+  try {
+    const { id, roomNumber } = await req.json();
+
+    if (!id || !roomNumber?.trim()) {
+      return NextResponse.json({ error: 'রুম নম্বর দিন' }, { status: 400 });
+    }
+
+    const room = await db.room.update({
+      where: { id },
+      data: { roomNumber: roomNumber.trim() },
+    });
+
+    return NextResponse.json(room);
+  } catch (error) {
+    return NextResponse.json({ error: 'রুম আপডেট করতে সমস্যা হয়েছে' }, { status: 500 });
+  }
+}
+
 // DELETE room
 export async function DELETE(req: NextRequest) {
   try {

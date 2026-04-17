@@ -60,6 +60,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH update building name
+export async function PATCH(req: NextRequest) {
+  try {
+    const { id, name } = await req.json();
+
+    if (!id || !name?.trim()) {
+      return NextResponse.json({ error: 'বিল্ডিং এর নাম দিন' }, { status: 400 });
+    }
+
+    const building = await db.building.update({
+      where: { id },
+      data: { name: name.trim() },
+    });
+
+    return NextResponse.json(building);
+  } catch (error) {
+    return NextResponse.json({ error: 'বিল্ডিং আপডেট করতে সমস্যা হয়েছে' }, { status: 500 });
+  }
+}
+
 // DELETE building (requires admin password verification)
 export async function DELETE(req: NextRequest) {
   try {
