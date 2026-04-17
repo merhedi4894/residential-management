@@ -1718,6 +1718,8 @@ function TenantsTab() {
                         });
                         const emptyRoomCount = roomsWithStatus.filter(r => r.emptySeats > 0).length;
                         const hasEmpty = emptyRoomCount > 0;
+                        const totalSeats = floorRooms.length * capacity;
+                        const emptySeatCount = roomsWithStatus.reduce((sum, r) => sum + r.emptySeats, 0);
 
                         return (
                           <div key={floor.id} className={`${hasEmpty ? "bg-gradient-to-r from-amber-50/80 to-transparent border-amber-200" : "bg-gray-50/50 border-gray-200"} border rounded-xl overflow-hidden`}>
@@ -1732,11 +1734,11 @@ function TenantsTab() {
                               <div className="ml-auto flex items-center gap-1.5">
                                 {hasEmpty && (
                                   <span className="text-[10px] font-bold text-indigo-900 bg-yellow-300 px-2 py-0.5 rounded-full shadow-sm">
-                                    {toBanglaNumber(emptyRoomCount)} খালি
+                                    খালি {toBanglaNumber(emptySeatCount)}
                                   </span>
                                 )}
-                                <span className="text-[10px] text-white/80 font-medium">
-                                  {toBanglaNumber(floorRooms.length)} রুম
+                                <span className="text-[10px] font-semibold text-white bg-white/15 px-2 py-0.5 rounded-full">
+                                  সিট {toBanglaNumber(totalSeats)}
                                 </span>
                               </div>
                             </div>
