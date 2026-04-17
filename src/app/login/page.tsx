@@ -13,6 +13,7 @@ import {
   KeyRound,
   User,
   ShieldCheck,
+  Phone,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -363,17 +364,16 @@ export default function LoginPage() {
 
         {/* ═══ LOGIN MODE ═══ */}
         {viewMode === "login" && (
+          <>
+            {/* Contact number - plain text with icon, outside card */}
+            <div className="text-center mb-4">
+              <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-600">
+                <Phone className="size-4" />
+                যোগাযোগ - <span className="text-base">01930-338334</span>
+              </span>
+            </div>
           <Card>
-            <CardContent className="pt-6">
-              {/* Contact number at top - plain text with icon */}
-              <div className="text-center mb-4">
-                <p className="text-sm font-bold text-emerald-700 inline-flex items-center gap-1.5">
-                  <Phone className="size-4" />
-                  যোগাযোগ - <span className="text-base">01930-338334</span>
-                </p>
-              </div>
-            </CardContent>
-            <CardHeader className="text-center pb-2 pt-0">
+            <CardHeader className="text-center pb-2 pt-6">
               <div className="mx-auto size-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
                 <LogIn className="size-5" />
               </div>
@@ -445,6 +445,7 @@ export default function LoginPage() {
               </div>
             </CardContent>
           </Card>
+          </>
         )}
 
         {/* ═══ RECOVERY STEP 1 ═══ */}

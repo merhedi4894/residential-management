@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import {
@@ -1079,8 +1079,8 @@ function TenantsTab() {
   const [loadingPrevItems, setLoadingPrevItems] = useState(false);
   const [loadingCommonItems, setLoadingCommonItems] = useState(false);
 
-  // Add dialog (direct form, no sub-tabs)
-  const [addDialogTab, setAddDialogTab] = useState<"add" | "empty">("add");
+  // Empty rooms dialog state
+  const [showEmptyRooms, setShowEmptyRooms] = useState(true);
 
   // Vacate dialog
   const [vacateOpen, setVacateOpen] = useState(false);
@@ -1120,6 +1120,37 @@ function TenantsTab() {
     (f) => f.id === tFloorId
   );
   const selectedRoom = selectedFloor?.rooms?.find((r) => r.id === tRoomId);
+
+  // Compute empty rooms (no active tenants)
+  const emptyRooms = useMemo(() => {
+    const result: { buildingName: string; buildingId: string; floorNumber: number; floorId: string; roomId: string; roomNumber: string }[] = [];
+    for (const building of buildings) {
+      for (const floor of building.floors || []) {
+        for (const room of floor.rooms || []) {
+          const hasActive = (room.tenants || []).some((t) => t.isActive);
+          if (!hasActive) {
+            result.push({
+              buildingName: building.name,
+              buildingId: building.id,
+              floorNumber: floor.floorNumber,
+              floorId: floor.id,
+              roomId: room.id,
+              roomNumber: room.roomNumber,
+            });
+          }
+        }
+      }
+    }
+    return result;
+  }, [buildings]);
+
+  const handleSelectEmptyRoom = (buildingId: string, floorId: string, roomId: string, roomNumber: string) => {
+    setTBuildingId(buildingId);
+    setTFloorId(floorId);
+    setTRoomId(roomId);
+    setTRoomNumber(roomNumber);
+    setShowEmptyRooms(false);
+  };
 
   // When room is selected, set room number and load previous inventory
   useEffect(() => {
@@ -1262,7 +1293,7 @@ function TenantsTab() {
     setTRoomNumber("");
     setInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
     setPreviousTenantName("");
-    setAddDialogTab("add");
+    setShowEmptyRooms(true);
   };
 
   const addInvRow = () =>
@@ -1381,17 +1412,92 @@ function TenantsTab() {
         >
           <DialogTrigger asChild>
             <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2">
-              <Plus className="size-4" />
-              নতুন ভাড়াটে
+              <BedDouble className="size-4" />
+              খালি রুম/সিট
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>নতুন ভাড়াটে যোগ করুন</DialogTitle>
-              <DialogDescription>
-                ভাড়াটে এর তথ্য এবং কমন মালামালের তালিকা দিন
-              </DialogDescription>
-            </DialogHeader>
+            {showEmptyRooms ? (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <BedDouble className="size-5 text-emerald-600" />
+                    খালি রুম/সিট
+                  </DialogTitle>
+                  <DialogDescription>
+                    খালি রুমে ক্লিক করে নতুন ভাড়াটে যোগ করুন
+                  </DialogDescription>
+                </DialogHeader>
+
+                {emptyRooms.length === 0 ? (
+                  <div className="text-center py-10">
+                    <BedDouble className="size-12 text-gray-300 mx-auto mb-3" />
+                    <p className="text-muted-foreground">কোনো খালি রুম নেই</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                    {(() => {
+                      const grouped = emptyRooms.reduce<Record<string, typeof emptyRooms>>((acc, r) => {
+                        const key = `${r.buildingName}__${r.floorNumber}`;
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(r);
+                        return acc;
+                      }, {});
+                      const floorNames: Record<number, string> = { 1: '১ম তলা', 2: '২য় তলা', 3: '৩য় তলা', 4: '৪র্থ তলা', 5: '৫ম তলা' };
+                      return Object.entries(grouped).map(([key, rooms]) => {
+                        const [bName, fNum] = key.split('__');
+                        return (
+                          <div key={key} className="border rounded-lg overflow-hidden">
+                            <div className="bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 flex items-center gap-2">
+                              <Building2 className="size-3.5" />
+                              {bName} — {floorNames[Number(fNum)] || `${fNum} তলা`}
+                            </div>
+                            <div className="divide-y">
+                              {rooms.map((r) => (
+                                <button
+                                  key={r.roomId}
+                                  type="button"
+                                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-50/50 transition-colors text-left"
+                                  onClick={() => handleSelectEmptyRoom(r.buildingId, r.floorId, r.roomId, r.roomNumber)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className="size-7 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-medium">
+                                      {r.roomNumber}
+                                    </div>
+                                    <span className="text-sm text-gray-700">রুম {r.roomNumber}</span>
+                                  </div>
+                                  <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                                    ভাড়াটে যোগ <ChevronRight className="size-3" />
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+
+                <div className="text-xs text-muted-foreground text-center pt-2">
+                  মোট খালি রুম: {toBanglaNumber(emptyRooms.length)} টি
+                </div>
+              </>
+            ) : (
+              <>
+                <DialogHeader>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-1"
+                    onClick={() => setShowEmptyRooms(true)}
+                  >
+                    ← খালি রুমে ফিরে যান
+                  </button>
+                  <DialogTitle>নতুন ভাড়াটে যোগ করুন</DialogTitle>
+                  <DialogDescription>
+                    ভাড়াটে এর তথ্য এবং কমন মালামালের তালিকা দিন
+                  </DialogDescription>
+                </DialogHeader>
 
             <div className="space-y-4">
               {/* Room selection cascade */}
@@ -1761,24 +1867,25 @@ function TenantsTab() {
               </div>
             </div>
 
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setAddOpen(false);
-                  resetAddForm();
-                }}
-              >
-                বাতিল
-              </Button>
-              <Button
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={handleAddTenant}
-                disabled={addingTenant}
-              >
-                {addingTenant ? "যোগ হচ্ছে..." : "যোগ করুন"}
-              </Button>
-            </DialogFooter>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowEmptyRooms(true);
+                  }}
+                >
+                  ফিরে যান
+                </Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={handleAddTenant}
+                  disabled={addingTenant}
+                >
+                  {addingTenant ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                </Button>
+              </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
           )}
