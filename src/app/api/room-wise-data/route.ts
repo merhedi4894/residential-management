@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    const currentTenant = allTenants.find((t) => t.isActive) || null;
+    // ALL active tenants (supports multiple co-tenants)
+    const currentTenants = allTenants.filter((t) => t.isActive);
     const previousTenants = allTenants.filter((t) => !t.isActive);
 
     // Get all inventory for this room
@@ -37,17 +38,18 @@ export async function GET(req: NextRequest) {
       include: { tenant: { select: { id: true, name: true } } },
     });
 
-    // Current inventory: items belonging to the active tenant
+    // Current inventory: items belonging to ANY active tenant
     // If no active tenant, items from the most recent tenant
     let currentInventory = allInventory;
     let previousInventory: typeof allInventory = [];
 
-    if (currentTenant) {
+    if (currentTenants.length > 0) {
+      const activeTenantIds = new Set(currentTenants.map((t) => t.id));
       currentInventory = allInventory.filter(
-        (inv) => inv.tenantId === currentTenant.id
+        (inv) => inv.tenantId && activeTenantIds.has(inv.tenantId)
       );
       previousInventory = allInventory.filter(
-        (inv) => inv.tenantId !== currentTenant.id
+        (inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId)
       );
     } else if (allTenants.length > 0) {
       // No active tenant - the most recent one is the "current"
@@ -74,14 +76,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       roomNumber: room.roomNumber,
-      currentTenant: currentTenant
-        ? {
-            id: currentTenant.id,
-            name: currentTenant.name,
-            phone: currentTenant.phone,
-            startDate: currentTenant.startDate,
-          }
-        : null,
+      currentTenants: currentTenants.map((t) => ({
+        id: t.id,
+        name: t.name,
+        phone: t.phone,
+        startDate: t.startDate,
+      })),
       previousTenants: previousTenants.map((t) => ({
         id: t.id,
         name: t.name,
