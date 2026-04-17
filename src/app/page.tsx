@@ -106,7 +106,7 @@ interface Tenant {
   isActive: boolean;
   createdAt: string;
   room: { id: string; roomNumber: string; floorId: string };
-  inventories: InventoryItem[];
+  inventories?: InventoryItem[];
 }
 
 interface TroubleReport {
@@ -264,7 +264,7 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
   }, [loadBuildings]);
 
   return (
-    <BuildingsContext.Provider value={{ buildings, reloadBuildings: loadBuildings, counts }}>
+    <BuildingsContext.Provider value={React.useMemo(() => ({ buildings, reloadBuildings: loadBuildings, counts }), [buildings, loadBuildings, counts])}>
       {children}
     </BuildingsContext.Provider>
   );

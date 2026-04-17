@@ -10,8 +10,7 @@ export async function GET(req: NextRequest) {
     const tenants = await db.tenant.findMany({
       where: roomId ? { roomId } : undefined,
       include: {
-        room: true,
-        inventories: { orderBy: { addedDate: 'desc' } },
+        room: { select: { id: true, roomNumber: true, floorId: true } },
       },
       orderBy: { createdAt: 'desc' },
     });

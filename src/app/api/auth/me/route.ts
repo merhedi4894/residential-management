@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { updateSecurityQuestion } from '@/lib/db-init';
 
 // GET - Check current session
 export async function GET(req: NextRequest) {
   try {
-    // Update security question on next page load after deployment
-    updateSecurityQuestion().catch(() => {});
-
     const sessionToken = req.cookies.get('session_token')?.value;
 
     if (!sessionToken) {

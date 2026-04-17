@@ -10,7 +10,7 @@ export async function GET() {
           include: {
             rooms: {
               include: {
-                tenants: { where: { isActive: true } },
+                tenants: { where: { isActive: true }, select: { id: true, name: true, isActive: true } },
               },
             },
           },
