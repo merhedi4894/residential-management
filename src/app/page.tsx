@@ -1077,6 +1077,7 @@ function TenantsTab() {
   const [editingInvIdx, setEditingInvIdx] = useState<number | null>(null);
   const [previousTenantName, setPreviousTenantName] = useState("");
   const [loadingPrevItems, setLoadingPrevItems] = useState(false);
+  const [loadingCommonItems, setLoadingCommonItems] = useState(false);
 
   // Add dialog sub-tabs
   const [addDialogTab, setAddDialogTab] = useState<"add" | "empty">("add");
@@ -1160,6 +1161,32 @@ function TenantsTab() {
       setPreviousTenantName("");
     } finally {
       setLoadingPrevItems(false);
+    }
+  };
+
+  const loadCommonBelongings = async (buildingId: string) => {
+    try {
+      setLoadingCommonItems(true);
+      const res = await fetch(`/api/belongings?buildingId=${buildingId}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setInvItems(
+          data.map((item: { itemName: string; quantity: number }) => ({
+            itemName: item.itemName,
+            quantity: String(item.quantity),
+            condition: "ভালো",
+          }))
+        );
+        setPreviousTenantName("");
+        toast.success(`${toBanglaNumber(data.length)} টি কমন মালামাল লোড হয়েছে`);
+      } else {
+        toast.error("এই বিল্ডিংয়ে কোনো কমন মালামাল নেই। প্রথমে কমন মালামাল ট্যাবে যোগ করুন।");
+      }
+    } catch {
+      toast.error("কমন মালামাল লোড করতে সমস্যা হয়েছে");
+    } finally {
+      setLoadingCommonItems(false);
     }
   };
 
@@ -1364,7 +1391,7 @@ function TenantsTab() {
             <DialogHeader>
               <DialogTitle>নতুন ভাড়াটে যোগ করুন</DialogTitle>
               <DialogDescription>
-                ভাড়াটে এর তথ্য এবং প্রাথমিক মালামালের তালিকা দিন
+                ভাড়াটে এর তথ্য এবং কমন মালামালের তালিকা দিন
               </DialogDescription>
             </DialogHeader>
 
@@ -1594,16 +1621,30 @@ function TenantsTab() {
                 )}
 
                 <div className="flex items-center justify-between">
-                  <Label>প্রাথমিক মালামাল</Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1 text-xs"
-                    onClick={addInvRow}
-                  >
-                    <Plus className="size-3" />
-                    আইটেম যোগ
-                  </Button>
+                  <Label>কমন মালামাল</Label>
+                  <div className="flex gap-2">
+                    {tBuildingId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-xs border-emerald-300 text-emerald-600 hover:bg-emerald-50"
+                        onClick={() => loadCommonBelongings(tBuildingId)}
+                        disabled={loadingCommonItems}
+                      >
+                        {loadingCommonItems ? <div className="size-3 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /> : <Package className="size-3" />}
+                        কমন মালামাল থেকে লোড করুন
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1 text-xs"
+                      onClick={addInvRow}
+                    >
+                      <Plus className="size-3" />
+                      আইটেম যোগ
+                    </Button>
+                  </div>
                 </div>
 
                 {loadingPrevItems && (
@@ -3055,9 +3096,6 @@ function BelongingsTab() {
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  // Assign loading
-  const [assigning, setAssigning] = useState(false);
-
   // Delete
   const [deleting, setDeleting] = useState(false);
 
@@ -3157,37 +3195,12 @@ function BelongingsTab() {
     }
   };
 
-  const handleAssign = async () => {
-    if (!selectedBuildingId) return;
-    setAssigning(true);
-    try {
-      const res = await fetch("/api/belongings/assign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buildingId: selectedBuildingId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error || "মালামাল বণ্টন করতে সমস্যা হয়েছে");
-        return;
-      }
-      toast.success(`সফল! ${toBanglaNumber(data.roomCount)} টি রুমে ${toBanglaNumber(data.assignedCount)} টি মালামাল বণ্টিত হয়েছে`);
-    } catch {
-      toast.error("মালামাল বণ্টন করতে সমস্যা হয়েছে");
-    } finally {
-      setAssigning(false);
-    }
-  };
-
   const [downloading, setDownloading] = useState(false);
 
-  const handleDownload = async (allBuildings = false) => {
-    if (!allBuildings && !selectedBuildingId) return;
+  const handleDownloadAll = async () => {
     setDownloading(true);
     try {
-      const url = allBuildings
-        ? `/api/belongings/download?all=true`
-        : `/api/belongings/download?buildingId=${selectedBuildingId}`;
+      const url = `/api/belongings/download?all=true`;
       const res = await fetch(url);
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -3207,7 +3220,7 @@ function BelongingsTab() {
       const urlObj = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = urlObj;
-      a.download = allBuildings ? "সকল_বিল্ডিং_মালামাল_তালিকা.xlsx" : "মালামাল_তালিকা.xlsx";
+      a.download = "সকল_রুমের_মালামাল_তালিকা.xlsx";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -3272,30 +3285,13 @@ function BelongingsTab() {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <Button
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                    onClick={handleAssign}
-                    disabled={assigning || templates.length === 0}
-                  >
-                    {assigning ? <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Package className="size-4" />}
-                    {assigning ? "বণ্টন হচ্ছে..." : "সব রুমে বণ্টন করুন"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => handleDownload(false)}
-                    disabled={downloading}
-                  >
-                    {downloading ? <div className="size-4 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /> : <Download className="size-4" />}
-                    XLSX ডাউনলোড
-                  </Button>
-                  <Button
                     variant="outline"
                     className="gap-2 border-blue-300 text-blue-600 hover:bg-blue-50"
-                    onClick={() => handleDownload(true)}
+                    onClick={handleDownloadAll}
                     disabled={downloading}
                   >
                     {downloading ? <div className="size-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" /> : <Download className="size-4" />}
-                    সকল বিল্ডিং XLSX
+                    সকল রুমের মালামাল
                   </Button>
                 </div>
               </div>
