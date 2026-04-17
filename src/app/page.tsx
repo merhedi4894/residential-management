@@ -534,7 +534,7 @@ function MainTabs() {
         </TabsTrigger>
         <TabsTrigger value="belongings" className="flex-1 sm:flex-auto gap-1.5">
           <Package className="size-4" />
-          <span className="hidden sm:inline">মালামাল</span>
+          <span className="hidden sm:inline">কমন মালামাল</span>
           <span className="sm:hidden">মালামাল</span>
         </TabsTrigger>
       </TabsList>
@@ -2658,7 +2658,7 @@ function OverviewTab() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5"><Label>বিল্ডিং নির্বাচন</Label><Select value={buildingId} onValueChange={(v) => { setBuildingId(v); setFloorId(""); setRoomId(""); setSearched(false); setData(null); }}><SelectTrigger className="w-full"><SelectValue placeholder="বিল্ডিং বেছে নিন" /></SelectTrigger><SelectContent>{buildings.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div>
           <div className="space-y-1.5"><Label>তলা নির্বাচন</Label><Select value={floorId} onValueChange={(v) => { setFloorId(v); setRoomId(""); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
-          <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId} onValueChange={(v) => { setRoomId(v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>))}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId} onValueChange={(v) => { setRoomId(v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : floorId ? "তলা নির্বাচিত" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent>{floorId ? (selectedFloor?.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>)) || []) : (selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>)))}</SelectContent></Select></div>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex bg-gray-100 rounded-lg p-0.5">
@@ -3179,26 +3179,44 @@ function BelongingsTab() {
     }
   };
 
-  const handleDownload = async () => {
-    if (!selectedBuildingId) return;
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async (allBuildings = false) => {
+    if (!allBuildings && !selectedBuildingId) return;
+    setDownloading(true);
     try {
-      const res = await fetch(`/api/belongings/download?buildingId=${selectedBuildingId}`);
+      const url = allBuildings
+        ? `/api/belongings/download?all=true`
+        : `/api/belongings/download?buildingId=${selectedBuildingId}`;
+      const res = await fetch(url);
       if (!res.ok) {
-        toast.error("ডাউনলোড করতে সমস্যা হয়েছে");
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error || "ডাউনলোড করতে সমস্যা হয়েছে");
+        return;
+      }
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('spreadsheetml') && !contentType.includes('octet-stream')) {
+        toast.error("ডাউনলোড করতে সমস্যা হয়েছে - সেশন মেয়াদোত্তীর্ণ হতে পারে");
         return;
       }
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      if (blob.size === 0) {
+        toast.error("ডাউনলোড করতে সমস্যা হয়েছে - ফাইল খালি");
+        return;
+      }
+      const urlObj = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "মালামাল_তালিকা.xlsx";
+      a.href = urlObj;
+      a.download = allBuildings ? "সকল_বিল্ডিং_মালামাল_তালিকা.xlsx" : "মালামাল_তালিকা.xlsx";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(urlObj);
       toast.success("XLSX ডাউনলোড হচ্ছে");
     } catch {
       toast.error("ডাউনলোড করতে সমস্যা হয়েছে");
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -3264,10 +3282,20 @@ function BelongingsTab() {
                   <Button
                     variant="outline"
                     className="gap-2"
-                    onClick={handleDownload}
+                    onClick={() => handleDownload(false)}
+                    disabled={downloading}
                   >
-                    <Download className="size-4" />
+                    {downloading ? <div className="size-4 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /> : <Download className="size-4" />}
                     XLSX ডাউনলোড
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 border-blue-300 text-blue-600 hover:bg-blue-50"
+                    onClick={() => handleDownload(true)}
+                    disabled={downloading}
+                  >
+                    {downloading ? <div className="size-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" /> : <Download className="size-4" />}
+                    সকল বিল্ডিং XLSX
                   </Button>
                 </div>
               </div>
