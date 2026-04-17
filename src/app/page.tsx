@@ -1722,20 +1722,20 @@ function TenantsTab() {
                         return (
                           <div key={floor.id} className={`${hasEmpty ? "bg-gradient-to-r from-amber-50/80 to-transparent border-amber-200" : "bg-gray-50/50 border-gray-200"} border rounded-xl overflow-hidden`}>
                             {/* Floor header */}
-                            <div className={`flex items-center gap-2 px-3 py-2 ${hasEmpty ? "bg-amber-100/60" : "bg-gray-100"}`}>
-                              <span className={`text-xs font-bold px-2 py-0.5 rounded ${hasEmpty ? "bg-amber-500 text-white" : "bg-gray-400 text-white"}`}>
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-t-xl ${hasEmpty ? "bg-gradient-to-r from-indigo-600 to-purple-600" : "bg-gradient-to-r from-slate-500 to-slate-600"}`}>
+                              <span className={`text-sm font-extrabold px-2.5 py-0.5 rounded-md text-white ${hasEmpty ? "bg-white/20" : "bg-white/15"}`}>
                                 {toBanglaNumber(floor.floorNumber)}
                               </span>
-                              <span className={`text-xs font-medium ${hasEmpty ? "text-amber-700" : "text-gray-500"}`}>
+                              <span className="text-sm font-semibold text-white tracking-wide">
                                 {toBanglaNumber(floor.floorNumber)} তলা
                               </span>
                               <div className="ml-auto flex items-center gap-1.5">
                                 {hasEmpty && (
-                                  <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">
+                                  <span className="text-[10px] font-bold text-indigo-900 bg-yellow-300 px-2 py-0.5 rounded-full shadow-sm">
                                     {toBanglaNumber(emptyRoomCount)} খালি
                                   </span>
                                 )}
-                                <span className="text-[10px] text-muted-foreground">
+                                <span className="text-[10px] text-white/80 font-medium">
                                   {toBanglaNumber(floorRooms.length)} রুম
                                 </span>
                               </div>
