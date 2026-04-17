@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 // GET all buildings
 export async function GET() {
@@ -28,6 +29,7 @@ export async function GET() {
 // POST create building
 export async function POST(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await req.json();
     const { name, totalFloors } = body;
 

@@ -47,6 +47,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "id" TEXT NOT NULL PRIMARY KEY,
         "name" TEXT NOT NULL,
         "totalFloors" INTEGER NOT NULL,
+        "capacityPerRoom" INTEGER NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL
       )`,
@@ -129,8 +130,8 @@ export async function ensureTablesExist(): Promise<boolean> {
         "vacatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "inventorySnapshot" TEXT NOT NULL,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id"),
-        FOREIGN KEY ("roomId") REFERENCES "Room"("id")
+        FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE,
+        FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
 
       // Guest table
@@ -156,6 +157,23 @@ export async function ensureTablesExist(): Promise<boolean> {
       } catch (err: any) {
         console.warn('[db-init] Statement warning:', err?.message || err);
       }
+    }
+
+    // Migrations: add columns if they don't exist
+    try {
+      // Add capacityPerRoom to Building if missing
+      const buildingCols = await client.execute({
+        sql: `PRAGMA table_info("Building")`,
+      });
+      const hasCapacityCol = buildingCols.rows.some((r: any) => r.name === 'capacityPerRoom');
+      if (!hasCapacityCol) {
+        await client.execute({
+          sql: `ALTER TABLE "Building" ADD COLUMN "capacityPerRoom" INTEGER NOT NULL DEFAULT 1`,
+        });
+        console.log('[db-init] Added capacityPerRoom column to Building');
+      }
+    } catch (err: any) {
+      console.warn('[db-init] Migration warning:', err?.message || err);
     }
 
     console.log('[db-init] Table check/creation completed');
