@@ -1031,7 +1031,16 @@ function BuildingsTab() {
                         {building.floors?.reduce(
                           (sum, f) => sum + (f.rooms?.length || 0),
                           0
-                        )} • সিট: {building.capacityPerRoom || 1}
+                        )}{" "}
+                        • মোট খালি সিট - {toBanglaNumber(
+                          building.floors?.reduce((totalEmpty, f) => {
+                            const cap = building.capacityPerRoom || 1;
+                            return totalEmpty + (f.rooms || []).reduce((empty, r) => {
+                              const active = (r.tenants?.length || 0);
+                                      return empty + Math.max(0, cap - active);
+                                    }, 0);
+                                  }, 0) || 0
+                        )} টি
                       </p>
                     </div>
                   </div>
