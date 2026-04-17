@@ -176,6 +176,51 @@ export async function ensureTablesExist(): Promise<boolean> {
       console.warn('[db-init] Migration warning:', err?.message || err);
     }
 
+    // Migration: recreate VacateRecord with ON DELETE CASCADE
+    // SQLite does not support ALTER TABLE to change FK constraints,
+    // so we must recreate the table
+    try {
+      const fkInfo = await client.execute({
+        sql: `PRAGMA foreign_key_list("VacateRecord")`,
+      });
+      const hasCascadeOnTenant = fkInfo.rows.some(
+        (r: any) => r.table === 'Tenant' && (r.on_delete || '').toUpperCase() === 'CASCADE'
+      );
+      const hasCascadeOnRoom = fkInfo.rows.some(
+        (r: any) => r.table === 'Room' && (r.on_delete || '').toUpperCase() === 'CASCADE'
+      );
+
+      if (!hasCascadeOnTenant || !hasCascadeOnRoom) {
+        console.log('[db-init] Migrating VacateRecord table to add ON DELETE CASCADE...');
+        await client.execute(`PRAGMA foreign_keys = OFF`);
+        await client.execute(`
+          CREATE TABLE "VacateRecord_new" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "tenantId" TEXT NOT NULL,
+            "tenantName" TEXT NOT NULL,
+            "roomId" TEXT NOT NULL,
+            "roomNumber" TEXT NOT NULL,
+            "vacatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "inventorySnapshot" TEXT NOT NULL,
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE,
+            FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
+          )
+        `);
+        await client.execute(`
+          INSERT INTO "VacateRecord_new" ("id","tenantId","tenantName","roomId","roomNumber","vacatedAt","inventorySnapshot","createdAt")
+          SELECT "id","tenantId","tenantName","roomId","roomNumber","vacatedAt","inventorySnapshot","createdAt" FROM "VacateRecord"
+        `);
+        await client.execute(`DROP TABLE "VacateRecord"`);
+        await client.execute(`ALTER TABLE "VacateRecord_new" RENAME TO "VacateRecord"`);
+        await client.execute(`PRAGMA foreign_keys = ON`);
+        console.log('[db-init] VacateRecord table migrated with ON DELETE CASCADE');
+      }
+    } catch (err: any) {
+      await client.execute(`PRAGMA foreign_keys = ON`).catch(() => {});
+      console.warn('[db-init] VacateRecord migration warning:', err?.message || err);
+    }
+
     console.log('[db-init] Table check/creation completed');
     return true;
   } catch (err: any) {

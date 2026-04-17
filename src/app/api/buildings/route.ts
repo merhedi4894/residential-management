@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
 // DELETE building
 export async function DELETE(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const { id } = await req.json();
     await db.building.delete({ where: { id } });
     return NextResponse.json({ success: true });
