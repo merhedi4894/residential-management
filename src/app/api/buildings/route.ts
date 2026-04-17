@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureTablesExist } from '@/lib/db-init';
+import bcrypt from 'bcryptjs';
 
 // GET all buildings
 export async function GET() {
@@ -59,11 +60,27 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE building
+// DELETE building (requires admin password verification)
 export async function DELETE(req: NextRequest) {
   try {
     await ensureTablesExist();
-    const { id } = await req.json();
+    const { id, adminPassword } = await req.json();
+
+    if (!adminPassword) {
+      return NextResponse.json({ error: 'এডমিন পাসওয়ার্ড দিন' }, { status: 400 });
+    }
+
+    // Verify admin password
+    const adminUser = await db.user.findFirst({ where: { isSetup: true } });
+    if (!adminUser) {
+      return NextResponse.json({ error: 'এডমিন ইউজার পাওয়া যায়নি' }, { status: 400 });
+    }
+
+    const isValid = await bcrypt.compare(adminPassword, adminUser.password);
+    if (!isValid) {
+      return NextResponse.json({ error: 'পাসওয়ার্ড ভুল হয়েছে' }, { status: 401 });
+    }
+
     await db.building.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

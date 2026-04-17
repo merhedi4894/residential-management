@@ -153,6 +153,17 @@ export async function ensureTablesExist(): Promise<boolean> {
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL
       )`,
+
+      // BelongingTemplate table
+      `CREATE TABLE IF NOT EXISTS "BelongingTemplate" (
+        "id" TEXT NOT NULL PRIMARY KEY,
+        "buildingId" TEXT NOT NULL,
+        "itemName" TEXT NOT NULL,
+        "quantity" INTEGER NOT NULL DEFAULT 1,
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL,
+        FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE
+      )`,
     ];
 
     for (const sql of statements) {

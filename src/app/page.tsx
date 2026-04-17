@@ -27,6 +27,8 @@ import {
   KeyRound,
   Lock,
   UserCheck,
+  Download,
+  Shield,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -530,6 +532,11 @@ function MainTabs() {
           <span className="hidden sm:inline">ট্রাবল রিপোর্ট</span>
           <span className="sm:hidden">ট্রাবল</span>
         </TabsTrigger>
+        <TabsTrigger value="belongings" className="flex-1 sm:flex-auto gap-1.5">
+          <Package className="size-4" />
+          <span className="hidden sm:inline">মালামাল</span>
+          <span className="sm:hidden">মালামাল</span>
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">
@@ -543,6 +550,9 @@ function MainTabs() {
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
         {visitedTabs.has("troubles") && <TroublesTab />}
+      </TabsContent>
+      <TabsContent value="belongings" className="mt-6">
+        {visitedTabs.has("belongings") && <BelongingsTab />}
       </TabsContent>
     </Tabs>
   );
@@ -573,6 +583,12 @@ function BuildingsTab() {
   const [deletingBuilding, setDeletingBuilding] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [deletingRoom, setDeletingRoom] = useState(false);
+
+  // Delete building password dialog
+  const [deleteBuildingId, setDeleteBuildingId] = useState("");
+  const [deleteBuildingName, setDeleteBuildingName] = useState("");
+  const [deletePassOpen, setDeletePassOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
 
   const refreshData = useCallback(() => {
     window.dispatchEvent(new Event("dashboard-data-changed"));
@@ -618,22 +634,39 @@ function BuildingsTab() {
     }
   };
 
-  const handleDeleteBuilding = async (id: string) => {
+  const handleDeleteBuilding = async () => {
+    if (!deletePassword.trim()) {
+      toast.error("এডমিন পাসওয়ার্ড দিন");
+      return;
+    }
     setDeletingBuilding(true);
     try {
       const res = await fetch("/api/buildings", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ id: deleteBuildingId, adminPassword: deletePassword.trim() }),
       });
-      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "বিল্ডিং মুছে ফেলতে সমস্যা হয়েছে");
+        return;
+      }
       toast.success("বিল্ডিং মুছে ফেলা হয়েছে");
+      setDeletePassOpen(false);
+      setDeletePassword("");
       refreshData();
     } catch {
       toast.error("বিল্ডিং মুছে ফেলতে সমস্যা হয়েছে");
     } finally {
       setDeletingBuilding(false);
     }
+  };
+
+  const openDeleteDialog = (buildingId: string, buildingName: string) => {
+    setDeleteBuildingId(buildingId);
+    setDeleteBuildingName(buildingName);
+    setDeletePassword("");
+    setDeletePassOpen(true);
   };
 
   const handleCreateRoom = async () => {
@@ -754,6 +787,48 @@ function BuildingsTab() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Building Password Dialog */}
+        <Dialog open={deletePassOpen} onOpenChange={(open) => { setDeletePassOpen(open); if (!open) setDeletePassword(""); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <Shield className="size-5" />
+                বিল্ডিং মুছে ফেলবেন?
+              </DialogTitle>
+              <DialogDescription>
+                &quot;{deleteBuildingName}&quot; বিল্ডিং এবং এর সকল তলা ও রুম স্থায়ীভাবে মুছে যাবে। নিশ্চিত করতে আপনার এডমিন পাসওয়ার্ড দিন।
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>এডমিন পাসওয়ার্ড</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    type="password"
+                    placeholder="পাসওয়ার্ড লিখুন"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleDeleteBuilding(); }}
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setDeletePassOpen(false); setDeletePassword(""); }}>বাতিল</Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={handleDeleteBuilding}
+                disabled={deletingBuilding || !deletePassword.trim()}
+              >
+                {deletingBuilding ? "মুছে ফেলা হচ্ছে..." : "মুছে ফেলুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {buildings.length === 0 && (
@@ -792,39 +867,14 @@ function BuildingsTab() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            বিল্ডিং মুছে ফেলবেন?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            &quot;{building.name}&quot; বিল্ডিং এবং এর সকল তলা ও
-                            রুম স্থায়ীভাবে মুছে যাবে। এই কাজ ফিরিয়ে আনা যাবে না।
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-red-600 hover:bg-red-700 text-white"
-                            onClick={() => handleDeleteBuilding(building.id)}
-                            disabled={deletingBuilding}
-                          >
-                            {deletingBuilding ? "মুছে ফেলা হচ্ছে..." : "মুছে ফেলুন"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={(e) => { e.stopPropagation(); openDeleteDialog(building.id, building.name); }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                     {expandedBuildings.has(building.id) ? (
                       <ChevronDown className="size-5 text-muted-foreground" />
                     ) : (
@@ -2970,6 +3020,421 @@ function GuestsTab() {
           <DialogFooter><Button variant="outline" onClick={() => { setEditOpen(false); setEditGuest(null); }}>বাতিল</Button><Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleEdit} disabled={editingGuest}>{editingGuest ? "আপডেট হচ্ছে..." : "আপডেট করুন"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB 5 — Belongings Management (মালামাল)
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface BelongingTemplate {
+  id: string;
+  buildingId: string;
+  itemName: string;
+  quantity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function BelongingsTab() {
+  const { buildings } = useBuildingsContext();
+  const [selectedBuildingId, setSelectedBuildingId] = useState("");
+  const [templates, setTemplates] = useState<BelongingTemplate[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Add new item
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemQuantity, setNewItemQuantity] = useState("1");
+  const [addingItem, setAddingItem] = useState(false);
+
+  // Edit item
+  const [editingId, setEditingId] = useState("");
+  const [editItemName, setEditItemName] = useState("");
+  const [editItemQuantity, setEditItemQuantity] = useState("1");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  // Assign loading
+  const [assigning, setAssigning] = useState(false);
+
+  // Delete
+  const [deleting, setDeleting] = useState(false);
+
+  const loadTemplates = useCallback(async () => {
+    if (!selectedBuildingId) {
+      setTemplates([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/belongings?buildingId=${selectedBuildingId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(data);
+      }
+    } catch { /* silent */ }
+    finally {
+      setLoading(false);
+    }
+  }, [selectedBuildingId]);
+
+  useEffect(() => {
+    if (selectedBuildingId) loadTemplates();
+    else setTemplates([]);
+  }, [selectedBuildingId, loadTemplates]);
+
+  const handleAddItem = async () => {
+    if (!newItemName.trim() || !selectedBuildingId) {
+      toast.error("মালামালের নাম দিন");
+      return;
+    }
+    setAddingItem(true);
+    try {
+      const res = await fetch("/api/belongings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          buildingId: selectedBuildingId,
+          itemName: newItemName.trim(),
+          quantity: parseInt(newItemQuantity) || 1,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("মালামাল যোগ হয়েছে");
+      setNewItemName("");
+      setNewItemQuantity("1");
+      loadTemplates();
+    } catch {
+      toast.error("মালামাল যোগ করতে সমস্যা হয়েছে");
+    } finally {
+      setAddingItem(false);
+    }
+  };
+
+  const handleEditItem = async () => {
+    if (!editItemName.trim() || !editingId) {
+      toast.error("মালামালের নাম দিন");
+      return;
+    }
+    setEditing(true);
+    try {
+      const res = await fetch("/api/belongings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingId,
+          itemName: editItemName.trim(),
+          quantity: parseInt(editItemQuantity) || 1,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("মালামাল আপডেট হয়েছে");
+      setEditOpen(false);
+      loadTemplates();
+    } catch {
+      toast.error("মালামাল আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/belongings", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("মালামাল মুছে ফেলা হয়েছে");
+      loadTemplates();
+    } catch {
+      toast.error("মালামাল মুছে ফেলতে সমস্যা হয়েছে");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!selectedBuildingId) return;
+    setAssigning(true);
+    try {
+      const res = await fetch("/api/belongings/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ buildingId: selectedBuildingId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "মালামাল বণ্টন করতে সমস্যা হয়েছে");
+        return;
+      }
+      toast.success(`সফল! ${toBanglaNumber(data.roomCount)} টি রুমে ${toBanglaNumber(data.assignedCount)} টি মালামাল বণ্টিত হয়েছে`);
+    } catch {
+      toast.error("মালামাল বণ্টন করতে সমস্যা হয়েছে");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!selectedBuildingId) return;
+    try {
+      const res = await fetch(`/api/belongings/download?buildingId=${selectedBuildingId}`);
+      if (!res.ok) {
+        toast.error("ডাউনলোড করতে সমস্যা হয়েছে");
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "মালামাল_তালিকা.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      toast.success("XLSX ডাউনলোড হচ্ছে");
+    } catch {
+      toast.error("ডাউনলোড করতে সমস্যা হয়েছে");
+    }
+  };
+
+  const openEditDialog = (item: BelongingTemplate) => {
+    setEditingId(item.id);
+    setEditItemName(item.itemName);
+    setEditItemQuantity(String(item.quantity));
+    setEditOpen(true);
+  };
+
+  const selectedBuilding = buildings.find((b) => b.id === selectedBuildingId);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <Package className="size-5 text-emerald-600" />
+          মালামাল ম্যানেজমেন্ট
+        </h2>
+      </div>
+
+      {/* Building Selection */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="space-y-3">
+            <Label>বিল্ডিং নির্বাচন করুন</Label>
+            <Select value={selectedBuildingId} onValueChange={setSelectedBuildingId}>
+              <SelectTrigger className="w-full sm:w-80">
+                <SelectValue placeholder="বিল্ডিং নির্বাচন করুন" />
+              </SelectTrigger>
+              <SelectContent>
+                {buildings.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name} ({b.floors?.reduce((s, f) => s + (f.rooms?.length || 0), 0) || 0} রুম)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedBuildingId && selectedBuilding && (
+        <>
+          {/* Info & Action Bar */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-gray-900">{selectedBuilding.name}</span> — মোট টেমপ্লেট আইটেম: <span className="font-bold text-emerald-700">{toBanglaNumber(templates.length)}</span> টি
+                  </p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                    onClick={handleAssign}
+                    disabled={assigning || templates.length === 0}
+                  >
+                    {assigning ? <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Package className="size-4" />}
+                    {assigning ? "বণ্টন হচ্ছে..." : "সব রুমে বণ্টন করুন"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={handleDownload}
+                  >
+                    <Download className="size-4" />
+                    XLSX ডাউনলোড
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Add New Item */}
+          <Card>
+            <CardContent className="pt-6">
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <Plus className="size-4 text-emerald-600" />
+                নতুন মালামাল যোগ করুন
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  placeholder="মালামালের নাম (যেমন: বিছানা)"
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAddItem(); }}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  placeholder="পরিমাণ"
+                  value={newItemQuantity}
+                  onChange={(e) => setNewItemQuantity(e.target.value)}
+                  className="w-full sm:w-24"
+                />
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                  onClick={handleAddItem}
+                  disabled={addingItem || !newItemName.trim()}
+                >
+                  {addingItem ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Template Items List */}
+          <Card>
+            <CardContent className="pt-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="size-6 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="size-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="text-sm text-muted-foreground">
+                    এই বিল্ডিংয়ে কোনো মালামাল টেমপ্লেট নেই। উপরে থেকে নতুন মালামাল যোগ করুন।
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {templates.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between bg-gray-50 rounded-lg border px-4 py-3"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center justify-center size-7 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
+                          {toBanglaNumber(index + 1)}
+                        </span>
+                        <div>
+                          <p className="font-medium text-sm">{item.itemName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            পরিমাণ: {toBanglaNumber(item.quantity)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="size-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => openEditDialog(item)}
+                        >
+                          <Edit3 className="size-3.5" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                              disabled={deleting}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                &quot;{item.itemName}&quot; টেমপ্লেট থেকে মুছে যাবে।
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>বাতিল</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                                onClick={() => handleDeleteItem(item.id)}
+                              >
+                                মুছে ফেলুন
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Edit Dialog */}
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>মালামাল সম্পাদনা করুন</DialogTitle>
+                <DialogDescription>মালামালের নাম ও পরিমাণ পরিবর্তন করুন</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>মালামালের নাম</Label>
+                  <Input
+                    value={editItemName}
+                    onChange={(e) => setEditItemName(e.target.value)}
+                    placeholder="মালামালের নাম"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>পরিমাণ</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={editItemQuantity}
+                    onChange={(e) => setEditItemQuantity(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(false)}>বাতিল</Button>
+                <Button
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={handleEditItem}
+                  disabled={editing || !editItemName.trim()}
+                >
+                  {editing ? "সেভ হচ্ছে..." : "সেভ করুন"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+
+      {!selectedBuildingId && (
+        <Alert>
+          <Package className="size-4" />
+          <AlertDescription>
+            মালামাল ম্যানেজমেন্ট শুরু করতে উপরে থেকে একটি বিল্ডিং নির্বাচন করুন।
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

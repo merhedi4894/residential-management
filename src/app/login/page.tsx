@@ -364,7 +364,15 @@ export default function LoginPage() {
         {/* ═══ LOGIN MODE ═══ */}
         {viewMode === "login" && (
           <Card>
-            <CardHeader className="text-center pb-2">
+            <CardContent className="pt-6">
+              {/* Contact number at top */}
+              <div className="text-center mb-4">
+                <p className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 inline-block">
+                  📞 যোগাযোগ - <span className="text-emerald-800 text-base">01930-338334</span>
+                </p>
+              </div>
+            </CardContent>
+            <CardHeader className="text-center pb-2 pt-0">
               <div className="mx-auto size-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
                 <LogIn className="size-5" />
               </div>

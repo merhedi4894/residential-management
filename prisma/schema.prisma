@@ -13,9 +13,10 @@ model Building {
   name           String
   totalFloors    Int
   capacityPerRoom Int      @default(1)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  floors         Floor[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  floors             Floor[]
+  belongingTemplates BelongingTemplate[]
 }
 
 // Floors in a building
@@ -119,6 +120,17 @@ model VacateRecord {
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   room             Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
+}
+
+// Belonging templates per building - default items for all rooms
+model BelongingTemplate {
+  id         String   @id @default(cuid())
+  buildingId String
+  itemName   String
+  quantity   Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
 }
 
 // Guest management
