@@ -498,12 +498,43 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
 // ── Main Tabs ────────────────────────────────────────────────────────────
 
 function MainTabs() {
+  const { reloadBuildings } = useBuildingsContext();
   const [activeTab, setActiveTab] = useState("buildings");
   const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["buildings"]));
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     setVisitedTabs(prev => new Set([...prev, value]));
+  };
+
+  const handleDeleteAll = async () => {
+    if (!deletePassword.trim()) {
+      toast.error("পাসওয়ার্ড দিন");
+      return;
+    }
+    try {
+      const res = await fetch("/api/delete-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "সমস্যা হয়েছে");
+        return;
+      }
+      toast.success("সমস্ত ডাটা মুছে ফেলা হয়েছে");
+      setDeleteAllOpen(false);
+      setDeletePassword("");
+      setDeleteConfirmOpen(false);
+      reloadBuildings();
+    } catch {
+      toast.error("ডাটা মুছে ফেলতে সমস্যা হয়েছে");
+    }
   };
 
   return (
@@ -529,6 +560,69 @@ function MainTabs() {
           <span className="hidden sm:inline">ট্রাবল রিপোর্ট</span>
           <span className="sm:hidden">ট্রাবল</span>
         </TabsTrigger>
+
+        {/* All Delete Button */}
+        <Dialog open={deleteAllOpen} onOpenChange={(v) => { setDeleteAllOpen(v); if (!v) { setDeletePassword(""); setDeleteConfirmOpen(false); } }}>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="flex-1 sm:flex-auto flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 hover:border-red-300 transition-colors cursor-pointer"
+            >
+              <Trash2 className="size-3.5" />
+              <span className="hidden sm:inline">All Delete</span>
+              <span className="sm:hidden">ডিলিট</span>
+            </button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertTriangle className="size-5" />
+                সমস্ত ডাটা মুছে ফেলুন
+              </DialogTitle>
+              <DialogDescription>
+                এই কাজটি করলে বিল্ডিং, রুম, ভাড়াটে, ট্রাবল রিপোর্ট সহ সমস্ত ডাটা চিরতরে মুছে যাবে। এটি পূর্বাবস্থায় ফেরানো যাবে না!
+              </DialogDescription>
+            </DialogHeader>
+
+            {!deleteConfirmOpen ? (
+              <div className="space-y-4">
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 font-medium">⚠ সতর্কতা</p>
+                  <p className="text-xs text-red-600 mt-1">এই অ্যাকশনটি বাতিল করা যাবে না। আপনি কি নিশ্চিত যে সমস্ত ডাটা মুছে ফেলতে চান?</p>
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => setDeleteAllOpen(false)}>বাতিল</Button>
+                  <Button variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>নিশ্চিত করুন</Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="delete-pw" className="text-sm font-medium">Admin পাসওয়ার্ড দিন</Label>
+                  <Input
+                    id="delete-pw"
+                    type="password"
+                    placeholder="পাসওয়ার্ড লিখুন"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleDeleteAll()}
+                    autoFocus
+                  />
+                </div>
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button variant="outline" onClick={() => { setDeleteConfirmOpen(false); setDeletePassword(""); }}>ফিরে যান</Button>
+                  <Button
+                    variant="destructive"
+                    disabled={isDeleting || !deletePassword.trim()}
+                    onClick={handleDeleteAll}
+                  >
+                    {isDeleting ? "মুছে ফেলা হচ্ছে..." : "সমস্ত ডাটা মুছুন"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">

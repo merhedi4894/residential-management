@@ -1,0 +1,45 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import bcrypt from 'bcryptjs';
+
+// POST - Verify admin password and delete all data
+export async function POST(req: NextRequest) {
+  try {
+    const { password } = await req.json();
+
+    if (!password) {
+      return NextResponse.json({ error: 'পাসওয়ার্ড দিন' }, { status: 400 });
+    }
+
+    // Get the admin user
+    const user = await db.user.findFirst({
+      select: { id: true, username: true, password: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'কোনো ইউজার পাওয়া যায়নি' }, { status: 401 });
+    }
+
+    // Verify password
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      return NextResponse.json({ error: 'ভুল পাসওয়ার্ড' }, { status: 401 });
+    }
+
+    // Delete all data in correct order (respecting FK constraints)
+    // VacateRecord -> Inventory -> TroubleReport -> Tenant -> Room -> Floor -> Building
+    await db.vacateRecord.deleteMany();
+    await db.inventory.deleteMany();
+    await db.troubleReport.deleteMany();
+    await db.tenant.deleteMany();
+    await db.room.deleteMany();
+    await db.floor.deleteMany();
+    await db.building.deleteMany();
+    await db.guest.deleteMany();
+
+    return NextResponse.json({ success: true, message: 'সমস্ত ডাটা মুছে ফেলা হয়েছে' });
+  } catch (error) {
+    console.error('Delete all error:', error);
+    return NextResponse.json({ error: 'ডাটা মুছে ফেলতে সমস্যা হয়েছে' }, { status: 500 });
+  }
+}
