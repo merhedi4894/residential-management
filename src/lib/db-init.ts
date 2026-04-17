@@ -6,6 +6,7 @@ import { createClient, Client } from '@libsql/client';
 import bcrypt from 'bcryptjs';
 
 let _client: Client | null = null;
+let _tablesVerified = false;
 
 function getLibsqlClient(): Client | null {
   const url = process.env.DATABASE_URL || '';
@@ -17,6 +18,8 @@ function getLibsqlClient(): Client | null {
 }
 
 export async function ensureTablesExist(): Promise<boolean> {
+  if (_tablesVerified) return true;
+
   const client = getLibsqlClient();
   if (!client) {
     console.log('[db-init] Not a Turso URL, skipping table creation');
@@ -239,6 +242,7 @@ export async function ensureTablesExist(): Promise<boolean> {
     }
 
     console.log('[db-init] Table check/creation completed');
+    _tablesVerified = true;
     return true;
   } catch (err: any) {
     console.error('[db-init] Failed to create tables:', err?.message || err);
