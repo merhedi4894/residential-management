@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 
       const sheet = workbook.addWorksheet(finalSheetName);
 
-      // Title row
+      // Title row (Row 1)
       sheet.mergeCells('A1', 'E1');
       const titleCell = sheet.getCell('A1');
       titleCell.value = `${building.name} - সকল রুমের মালামাল তালিকা`;
@@ -64,30 +64,42 @@ export async function GET(req: NextRequest) {
       titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
       sheet.getRow(1).height = 28;
 
-      // Date row
+      // Date row (Row 2)
       sheet.mergeCells('A2', 'E2');
       const dateCell = sheet.getCell('A2');
       dateCell.value = `তারিখ: ${new Date().toLocaleDateString('bn-BD')}`;
       dateCell.alignment = { horizontal: 'center' };
 
-      // Header row
-      const headerRow = sheet.addRow(['তলার নাম', 'রুম নং', 'মালামাল বিবরণ', 'পরিমাণ', 'অবস্থা']);
-      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF10B981' },
-      };
-      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      // Header row (Row 3) - manually set each cell to avoid addRow counter issues
+      const headerLabels = ['তলার নাম', 'রুম নং', 'মালামাল বিবরণ', 'পরিমাণ', 'অবস্থা'];
+      const headerRowNum = 3;
+      for (let col = 1; col <= 5; col++) {
+        const cell = sheet.getRow(headerRowNum).getCell(col);
+        cell.value = headerLabels[col - 1];
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF10B981' },
+        };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      }
+      sheet.getRow(headerRowNum).height = 22;
 
       // Set column widths
-      sheet.getColumn(1).width = 14;
+      sheet.getColumn(1).width = 16;
       sheet.getColumn(2).width = 14;
       sheet.getColumn(3).width = 28;
       sheet.getColumn(4).width = 12;
       sheet.getColumn(5).width = 12;
 
-      let currentRow = 3;
+      let currentRow = 4;
 
       for (const floor of floors) {
         const floorName = floorNames[floor.floorNumber] || `${floor.floorNumber} তলা`;
