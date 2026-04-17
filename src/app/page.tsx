@@ -143,6 +143,7 @@ interface Building {
   id: string;
   name: string;
   totalFloors: number;
+  capacityPerRoom: number;
   createdAt: string;
   floors: Floor[];
 }
@@ -560,6 +561,7 @@ function BuildingsTab() {
   const [addBuildingOpen, setAddBuildingOpen] = useState(false);
   const [newBuildingName, setNewBuildingName] = useState("");
   const [newBuildingFloors, setNewBuildingFloors] = useState("");
+  const [newBuildingCapacity, setNewBuildingCapacity] = useState("1");
 
   const [addRoomFloorId, setAddRoomFloorId] = useState("");
   const [addRoomNumber, setAddRoomNumber] = useState("");
@@ -591,12 +593,14 @@ function BuildingsTab() {
         body: JSON.stringify({
           name: newBuildingName.trim(),
           totalFloors: parseInt(newBuildingFloors),
+          capacityPerRoom: parseInt(newBuildingCapacity) || 1,
         }),
       });
       if (!res.ok) throw new Error();
       toast.success("বিল্ডিং তৈরি হয়েছে");
       setNewBuildingName("");
       setNewBuildingFloors("");
+      setNewBuildingCapacity("1");
       setAddBuildingOpen(false);
       refreshData();
     } catch {
@@ -677,7 +681,7 @@ function BuildingsTab() {
             <DialogHeader>
               <DialogTitle>নতুন বিল্ডিং যোগ করুন</DialogTitle>
               <DialogDescription>
-                বিল্ডিং এর নাম এবং মোট তলার সংখ্যা লিখুন
+                বিল্ডিং এর নাম, মোট তলার সংখ্যা এবং প্রতি রুমে সিট সংখ্যা লিখুন
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -700,6 +704,18 @@ function BuildingsTab() {
                   value={newBuildingFloors}
                   onChange={(e) => setNewBuildingFloors(e.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bcapacity">প্রতি রুমে সিট সংখ্যা</Label>
+                <Input
+                  id="bcapacity"
+                  type="number"
+                  min={1}
+                  placeholder="১"
+                  value={newBuildingCapacity}
+                  onChange={(e) => setNewBuildingCapacity(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">প্রতি রুমে কয়জন ভাড়াটে থাকতে পারবে (যেমন: ১, ২, ৩...)</p>
               </div>
             </div>
             <DialogFooter>
@@ -1663,8 +1679,7 @@ function TenantsTab() {
                   </div>
                 );
 
-                const isStuffBuilding = bldg.name.toLowerCase().includes("stuff");
-                const capacity = isStuffBuilding ? 2 : 1;
+                const capacity = bldg.capacityPerRoom || 1;
 
                 // Compute stats
                 let totalRooms = 0;
@@ -1704,7 +1719,7 @@ function TenantsTab() {
                     <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
                       <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-amber-400" /> খালি সিট</span>
                       <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-emerald-500" /> ভর্তি সিট</span>
-                      {isStuffBuilding && <span className="flex items-center gap-1"><BedDouble className="size-3 text-blue-500" /> প্রতি রুমে ২ সিট</span>}
+                      {capacity > 1 && <span className="flex items-center gap-1"><BedDouble className="size-3 text-blue-500" /> প্রতি রুমে {toBanglaNumber(capacity)} সিট</span>}
                     </div>
 
                     {/* Visual Floor Plan */}
@@ -1744,21 +1759,16 @@ function TenantsTab() {
                             </div>
 
                             {/* Room grid */}
-                            <div className="p-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isStuffBuilding ? "155px" : "130px"}, 1fr))` }}>
+                            <div className="p-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${capacity > 1 ? "155px" : "130px"}, 1fr))` }}>
                               {roomsWithStatus.map(room => {
                                 if (room.isFull) {
                                   return (
                                     <div key={room.id} className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 opacity-60">
                                       <div className="shrink-0">
-                                        {isStuffBuilding ? (
-                                          <div className="flex gap-0.5">
-                                            <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                            <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                          </div>
-                                        ) : (
-                                          <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                        )}
-                                      </div>
+                                      {Array.from({ length: capacity }).map((_, idx) => (
+                                        <div key={idx} className="size-2.5 bg-emerald-500 rounded-full" />
+                                      ))}
+                                    </div>
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-emerald-700 truncate">{room.roomNumber}</p>
                                         <p className="text-[10px] text-emerald-500 truncate">{room.activeTenants.map(t => t.name).join(", ")}</p>
@@ -1781,20 +1791,15 @@ function TenantsTab() {
                                   >
                                     {/* Seat indicators */}
                                     <div className="flex gap-1 shrink-0">
-                                      {isStuffBuilding ? (
-                                        <>
-                                          <div className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[0] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`} title={room.activeTenants[0]?.name || "সিট ১ - খালি"}>
-                                            {!room.activeTenants[0] && <div className="size-1.5 bg-amber-500 rounded-full" />}
-                                          </div>
-                                          <div className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[1] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`} title={room.activeTenants[1]?.name || "সিট ২ - খালি"}>
-                                            {!room.activeTenants[1] && <div className="size-1.5 bg-amber-500 rounded-full" />}
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div className="size-4 rounded-full flex items-center justify-center border-2 border-dashed border-amber-400 bg-amber-100" title="সিট - খালি">
-                                          <div className="size-1.5 bg-amber-500 rounded-full" />
+                                      {Array.from({ length: capacity }).map((_, idx) => (
+                                        <div
+                                          key={idx}
+                                          className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[idx] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`}
+                                          title={room.activeTenants[idx]?.name || `সিট ${toBanglaNumber(idx + 1)} - খালি`}
+                                        >
+                                          {!room.activeTenants[idx] && <div className="size-1.5 bg-amber-500 rounded-full" />}
                                         </div>
-                                      )}
+                                      ))}
                                     </div>
 
                                     <div className="min-w-0 text-left">

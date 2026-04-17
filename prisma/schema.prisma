@@ -9,12 +9,13 @@ datasource db {
 
 // Buildings in the residential area
 model Building {
-  id        String   @id @default(cuid())
-  name      String
-  totalFloors Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  floors    Floor[]
+  id             String   @id @default(cuid())
+  name           String
+  totalFloors    Int
+  capacityPerRoom Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  floors         Floor[]
 }
 
 // Floors in a building
@@ -114,8 +115,8 @@ model VacateRecord {
   roomNumber       String
   vacatedAt        DateTime @default(now())
   inventorySnapshot String
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
-  room             Room     @relation(fields: [roomId], references: [id])
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  room             Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
 }
 

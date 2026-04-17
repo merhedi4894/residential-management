@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       data: {
         name,
         totalFloors: parseInt(totalFloors),
+        capacityPerRoom: parseInt(body.capacityPerRoom) || 1,
       },
     });
 
