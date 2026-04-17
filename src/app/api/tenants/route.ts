@@ -25,13 +25,15 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, phone, roomId, startDate, inventoryItems } = body;
+    const { name, phone, roomId, startDate, inventoryItems, skipDeactivate } = body;
 
-    // Deactivate existing active tenants in this room
-    await db.tenant.updateMany({
-      where: { roomId, isActive: true },
-      data: { isActive: false, endDate: new Date() },
-    });
+    // Deactivate existing active tenants in this room (unless skipDeactivate is true)
+    if (!skipDeactivate) {
+      await db.tenant.updateMany({
+        where: { roomId, isActive: true },
+        data: { isActive: false, endDate: new Date() },
+      });
+    }
 
     // Create new tenant
     const tenant = await db.tenant.create({

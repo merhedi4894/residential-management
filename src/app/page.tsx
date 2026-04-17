@@ -231,7 +231,6 @@ function useBuildingsContext() {
 
 function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
   const [buildings, setBuildings] = useState<Building[]>([]);
-  const [counts, setCounts] = useState({ buildingCount: 0, roomCount: 0, tenantCount: 0 });
 
   const loadBuildings = useCallback(async () => {
     try {
@@ -242,22 +241,27 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
     } catch { /* silent */ }
   }, []);
 
-  const loadCounts = useCallback(async () => {
-    try {
-      const res = await fetch("/api/counts");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setCounts(data);
-    } catch { /* silent */ }
-  }, []);
+  // Compute counts directly from buildings data (no separate API call needed)
+  const counts = React.useMemo(() => {
+    let roomCount = 0;
+    let tenantCount = 0;
+    for (const b of buildings) {
+      for (const f of b.floors || []) {
+        roomCount += (f.rooms || []).length;
+        for (const r of f.rooms || []) {
+          tenantCount += (r.tenants || []).length;
+        }
+      }
+    }
+    return { buildingCount: buildings.length, roomCount, tenantCount };
+  }, [buildings]);
 
   useEffect(() => {
     loadBuildings();
-    loadCounts();
-    const handler = () => { loadBuildings(); loadCounts(); };
+    const handler = () => { loadBuildings(); };
     window.addEventListener("dashboard-data-changed", handler);
     return () => window.removeEventListener("dashboard-data-changed", handler);
-  }, [loadBuildings, loadCounts]);
+  }, [loadBuildings]);
 
   return (
     <BuildingsContext.Provider value={{ buildings, reloadBuildings: loadBuildings, counts }}>
@@ -375,8 +379,8 @@ export default function HomePage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50/30 flex flex-col">
       <Toaster position="top-right" richColors />
       <div className="container mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 flex-1">
-        <DashboardHeader user={user} onLogout={handleLogout} onChangePassword={() => { setCurrentPass(""); setNewPass(""); setChangePassOpen(true); }} />
         <BuildingsContextWrapper>
+          <DashboardHeader user={user} onLogout={handleLogout} onChangePassword={() => { setCurrentPass(""); setNewPass(""); setChangePassOpen(true); }} />
           <MainTabs />
         </BuildingsContextWrapper>
       </div>
@@ -962,9 +966,16 @@ function TenantsTab() {
 
   // Add tenant dialog
   const [addOpen, setAddOpen] = useState(false);
+  // Tenant 1
   const [tName, setTName] = useState("");
   const [tPhone, setTPhone] = useState("");
   const [tStartDate, setTStartDate] = useState("");
+  // Tenant 2 (optional co-tenant)
+  const [t2Name, setT2Name] = useState("");
+  const [t2Phone, setT2Phone] = useState("");
+  const [t2StartDate, setT2StartDate] = useState("");
+  const [showTenant2, setShowTenant2] = useState(false);
+  // Room selection
   const [tBuildingId, setTBuildingId] = useState("");
   const [tFloorId, setTFloorId] = useState("");
   const [tRoomId, setTRoomId] = useState("");
@@ -1058,8 +1069,13 @@ function TenantsTab() {
       toast.error("নাম, রুম এবং শুরুর তারিখ দিন");
       return;
     }
+    if (showTenant2 && !t2Name.trim()) {
+      toast.error("২য় ভাড়াটের নাম দিন");
+      return;
+    }
     try {
-      const res = await fetch("/api/tenants", {
+      // Create tenant 1
+      const res1 = await fetch("/api/tenants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1071,8 +1087,27 @@ function TenantsTab() {
           inventoryItems: invItems.filter((i) => i.itemName.trim()),
         }),
       });
-      if (!res.ok) throw new Error();
-      toast.success("ভাড়াটে যোগ হয়েছে");
+      if (!res1.ok) throw new Error();
+
+      // If tenant 2 exists, create without deactivating tenant 1
+      if (showTenant2 && t2Name.trim()) {
+        const res2 = await fetch("/api/tenants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: t2Name.trim(),
+            phone: t2Phone.trim() || null,
+            roomId: tRoomId,
+            roomNumber: tRoomNumber,
+            startDate: t2StartDate || tStartDate,
+            inventoryItems: invItems.filter((i) => i.itemName.trim()),
+            skipDeactivate: true,
+          }),
+        });
+        if (!res2.ok) throw new Error();
+      }
+
+      toast.success(showTenant2 ? "দুইজন ভাড়াটে যোগ হয়েছে" : "ভাড়াটে যোগ হয়েছে");
       resetAddForm();
       setAddOpen(false);
       loadData();
@@ -1085,6 +1120,10 @@ function TenantsTab() {
     setTName("");
     setTPhone("");
     setTStartDate("");
+    setT2Name("");
+    setT2Phone("");
+    setT2StartDate("");
+    setShowTenant2(false);
     setTBuildingId("");
     setTFloorId("");
     setTRoomId("");
@@ -1292,34 +1331,94 @@ function TenantsTab() {
                 </div>
               </div>
 
-              {/* Tenant details */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>নাম *</Label>
-                  <Input
-                    placeholder="ভাড়াটে এর নাম"
-                    value={tName}
-                    onChange={(e) => setTName(e.target.value)}
-                  />
+              {/* Tenant 1 details */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Users className="size-4 text-emerald-600" />
+                  <span className="font-medium text-sm">১ম ভাড়াটে</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>নাম *</Label>
+                    <Input
+                      placeholder="ভাড়াটে এর নাম"
+                      value={tName}
+                      onChange={(e) => setTName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>ফোন নম্বর</Label>
+                    <Input
+                      placeholder="০১XXXXXXXXX"
+                      value={tPhone}
+                      onChange={(e) => setTPhone(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>ফোন নম্বর</Label>
+                  <Label>শুরুর তারিখ *</Label>
                   <Input
-                    placeholder="০১XXXXXXXXX"
-                    value={tPhone}
-                    onChange={(e) => setTPhone(e.target.value)}
+                    type="date"
+                    value={tStartDate}
+                    onChange={(e) => setTStartDate(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label>শুরুর তারিখ *</Label>
-                <Input
-                  type="date"
-                  value={tStartDate}
-                  onChange={(e) => setTStartDate(e.target.value)}
-                />
+              {/* Add 2nd tenant toggle */}
+              <div className="flex items-center justify-between border-t pt-3">
+                <span className="text-sm text-muted-foreground">একই রুমে আরেকজন ভাড়াটে থাকবেন?</span>
+                <Button
+                  type="button"
+                  variant={showTenant2 ? "default" : "outline"}
+                  size="sm"
+                  className={showTenant2 ? "bg-emerald-600 hover:bg-emerald-700 text-white gap-1" : "gap-1"}
+                  onClick={() => setShowTenant2(!showTenant2)}
+                >
+                  <Plus className="size-3" />
+                  {showTenant2 ? "২য় ভাড়াটে সরান" : "২য় ভাড়াটে যোগ"}
+                </Button>
               </div>
+
+              {/* Tenant 2 details */}
+              {showTenant2 && (
+                <div className="space-y-3 bg-blue-50/50 border border-blue-100 rounded-lg p-4">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-blue-600" />
+                    <span className="font-medium text-sm">২য় ভাড়াটে</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>নাম *</Label>
+                      <Input
+                        placeholder="২য় ভাড়াটে এর নাম"
+                        value={t2Name}
+                        onChange={(e) => setT2Name(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>ফোন নম্বর</Label>
+                      <Input
+                        placeholder="০১XXXXXXXXX"
+                        value={t2Phone}
+                        onChange={(e) => setT2Phone(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>শুরুর তারিখ</Label>
+                    <Input
+                      type="date"
+                      value={t2StartDate}
+                      onChange={(e) => setT2StartDate(e.target.value)}
+                      placeholder="১ম ভাড়াটে এর তারিখ ব্যবহার হবে"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      খালি রাখলে ১ম ভাড়াটে এর তারিখ ব্যবহার হবে
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Inventory items */}
               <div className="space-y-3">
