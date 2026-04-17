@@ -76,6 +76,7 @@ export async function ensureTablesExist(): Promise<boolean> {
       `CREATE TABLE IF NOT EXISTS "Tenant" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "name" TEXT NOT NULL,
+        "designation" TEXT,
         "phone" TEXT,
         "roomId" TEXT NOT NULL,
         "startDate" DATETIME NOT NULL,
@@ -219,6 +220,22 @@ export async function ensureTablesExist(): Promise<boolean> {
     } catch (err: any) {
       await client.execute(`PRAGMA foreign_keys = ON`).catch(() => {});
       console.warn('[db-init] VacateRecord migration warning:', err?.message || err);
+    }
+
+    // Migration: add designation to Tenant if missing
+    try {
+      const tenantCols = await client.execute({
+        sql: `PRAGMA table_info("Tenant")`,
+      });
+      const hasDesignationCol = tenantCols.rows.some((r: any) => r.name === 'designation');
+      if (!hasDesignationCol) {
+        await client.execute({
+          sql: `ALTER TABLE "Tenant" ADD COLUMN "designation" TEXT`,
+        });
+        console.log('[db-init] Added designation column to Tenant');
+      }
+    } catch (err: any) {
+      console.warn('[db-init] Tenant designation migration warning:', err?.message || err);
     }
 
     console.log('[db-init] Table check/creation completed');

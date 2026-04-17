@@ -79,12 +79,14 @@ export async function GET(req: NextRequest) {
       currentTenants: currentTenants.map((t) => ({
         id: t.id,
         name: t.name,
+        designation: t.designation,
         phone: t.phone,
         startDate: t.startDate,
       })),
       previousTenants: previousTenants.map((t) => ({
         id: t.id,
         name: t.name,
+        designation: t.designation,
         phone: t.phone,
         startDate: t.startDate,
         endDate: t.endDate,

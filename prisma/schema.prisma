@@ -47,6 +47,7 @@ model Room {
 model Tenant {
   id            String          @id @default(cuid())
   name          String
+  designation   String?
   phone         String?
   roomId        String
   startDate     DateTime

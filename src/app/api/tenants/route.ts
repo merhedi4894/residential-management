@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, phone, roomId, startDate, inventoryItems, skipDeactivate } = body;
+    const { name, designation, phone, roomId, startDate, inventoryItems, skipDeactivate } = body;
 
     // Deactivate existing active tenants in this room (unless skipDeactivate is true)
     if (!skipDeactivate) {
@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const tenant = await db.tenant.create({
       data: {
         name,
+        designation: designation || null,
         phone: phone || null,
         roomId,
         startDate: new Date(startDate),
@@ -76,12 +77,13 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, action, name, phone } = body;
+    const { id, action, name, designation, phone } = body;
 
     if (action === "updateInfo") {
-      // Update tenant name and/or phone
+      // Update tenant name, designation and/or phone
       const updateData: Record<string, unknown> = {};
       if (name !== undefined) updateData.name = name;
+      if (designation !== undefined) updateData.designation = designation || null;
       if (phone !== undefined) updateData.phone = phone || null;
 
       const tenant = await db.tenant.update({
