@@ -365,10 +365,11 @@ export default function LoginPage() {
         {viewMode === "login" && (
           <Card>
             <CardContent className="pt-6">
-              {/* Contact number at top */}
+              {/* Contact number at top - plain text with icon */}
               <div className="text-center mb-4">
-                <p className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 inline-block">
-                  📞 যোগাযোগ - <span className="text-emerald-800 text-base">01930-338334</span>
+                <p className="text-sm font-bold text-emerald-700 inline-flex items-center gap-1.5">
+                  <Phone className="size-4" />
+                  যোগাযোগ - <span className="text-base">01930-338334</span>
                 </p>
               </div>
             </CardContent>

@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       dateCell.alignment = { horizontal: 'center' };
 
       // Header row
-      const headerRow = sheet.addRow(['তলা', 'রুম নং', 'মালামালের নাম', 'পরিমাণ', 'অবস্থা']);
+      const headerRow = sheet.addRow(['তলার নাম', 'রুম নং', 'মালামাল বিবরণ', 'পরিমাণ', 'অবস্থা']);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
         type: 'pattern',

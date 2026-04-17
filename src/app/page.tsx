@@ -1079,9 +1079,8 @@ function TenantsTab() {
   const [loadingPrevItems, setLoadingPrevItems] = useState(false);
   const [loadingCommonItems, setLoadingCommonItems] = useState(false);
 
-  // Add dialog sub-tabs
+  // Add dialog (direct form, no sub-tabs)
   const [addDialogTab, setAddDialogTab] = useState<"add" | "empty">("add");
-  const [emptyBuildingId, setEmptyBuildingId] = useState("");
 
   // Vacate dialog
   const [vacateOpen, setVacateOpen] = useState(false);
@@ -1264,7 +1263,6 @@ function TenantsTab() {
     setInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
     setPreviousTenantName("");
     setAddDialogTab("add");
-    setEmptyBuildingId("");
   };
 
   const addInvRow = () =>
@@ -1395,35 +1393,6 @@ function TenantsTab() {
               </DialogDescription>
             </DialogHeader>
 
-            {/* Dialog Sub-Tabs */}
-            <div className="flex border-b mb-4">
-              <button
-                type="button"
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  addDialogTab === "add"
-                    ? "border-emerald-600 text-emerald-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-                onClick={() => setAddDialogTab("add")}
-              >
-                <Users className="size-4 inline-block mr-1.5 -mt-0.5" />
-                নতুন ভাড়াটে যোগ
-              </button>
-              <button
-                type="button"
-                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                  addDialogTab === "empty"
-                    ? "border-emerald-600 text-emerald-600"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
-                }`}
-                onClick={() => setAddDialogTab("empty")}
-              >
-                <BedDouble className="size-4 inline-block mr-1.5 -mt-0.5" />
-                খালি রুম/সিট
-              </button>
-            </div>
-
-            {addDialogTab === "add" && (
             <div className="space-y-4">
               {/* Room selection cascade */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1791,197 +1760,7 @@ function TenantsTab() {
                 )}
               </div>
             </div>
-            )}
 
-            {addDialogTab === "empty" && (
-            <div className="space-y-4">
-              {/* Building selector */}
-              <div className="space-y-1.5">
-                <Label className="text-sm font-medium">বিল্ডিং নির্বাচন করুন</Label>
-                <Select value={emptyBuildingId} onValueChange={(v) => {
-                  setEmptyBuildingId(v);
-                }}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="বিল্ডিং বেছে নিন" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {buildings.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Floor-wise empty rooms list */}
-              {emptyBuildingId && (() => {
-                const bldg = buildings.find(b => b.id === emptyBuildingId);
-                if (!bldg || !bldg.floors?.length) return (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Building2 className="size-10 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">এই বিল্ডিংয়ে কোন তলা নেই</p>
-                  </div>
-                );
-
-                const capacity = bldg.capacityPerRoom || 1;
-
-                // Compute stats
-                let totalRooms = 0;
-                let totalEmptySeats = 0;
-                let totalFullRooms = 0;
-                bldg.floors.forEach(floor => {
-                  (floor.rooms || []).forEach(room => {
-                    totalRooms++;
-                    const active = (room.tenants?.filter(t => t.isActive) || []).length;
-                    const empty = capacity - active;
-                    if (empty > 0) totalEmptySeats += empty;
-                    else totalFullRooms++;
-                  });
-                });
-
-                const sortedFloors = [...bldg.floors].sort((a, b) => b.floorNumber - a.floorNumber);
-
-                return (
-                  <div className="space-y-3">
-                    {/* Summary cards */}
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="text-center p-2.5 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="text-lg font-bold text-blue-700">{toBanglaNumber(totalRooms)}</p>
-                        <p className="text-[10px] text-blue-500 mt-0.5">মোট রুম</p>
-                      </div>
-                      <div className="text-center p-2.5 bg-amber-50 rounded-lg border border-amber-200">
-                        <p className="text-lg font-bold text-amber-600">{toBanglaNumber(totalEmptySeats)}</p>
-                        <p className="text-[10px] text-amber-500 mt-0.5">খালি সিট</p>
-                      </div>
-                      <div className="text-center p-2.5 bg-emerald-50 rounded-lg border border-emerald-200">
-                        <p className="text-lg font-bold text-emerald-600">{toBanglaNumber(totalFullRooms)}</p>
-                        <p className="text-[10px] text-emerald-500 mt-0.5">পূর্ণ রুম</p>
-                      </div>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
-                      <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-amber-400" /> খালি সিট</span>
-                      <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-emerald-500" /> ভর্তি সিট</span>
-                      {capacity > 1 && <span className="flex items-center gap-1"><BedDouble className="size-3 text-blue-500" /> প্রতি রুমে {toBanglaNumber(capacity)} সিট</span>}
-                    </div>
-
-                    {/* Visual Floor Plan */}
-                    <div className="space-y-2">
-                      {sortedFloors.map(floor => {
-                        const floorRooms = floor.rooms || [];
-                        const roomsWithStatus = floorRooms.map(room => {
-                          const activeTenants = room.tenants?.filter(t => t.isActive) || [];
-                          const emptySeats = capacity - activeTenants.length;
-                          return { ...room, activeTenants, emptySeats, isFull: emptySeats <= 0 };
-                        });
-                        const emptyRoomCount = roomsWithStatus.filter(r => r.emptySeats > 0).length;
-                        const hasEmpty = emptyRoomCount > 0;
-                        const totalSeats = floorRooms.length * capacity;
-                        const emptySeatCount = roomsWithStatus.reduce((sum, r) => sum + r.emptySeats, 0);
-
-                        return (
-                          <div key={floor.id} className={`${hasEmpty ? "bg-gradient-to-r from-amber-50/80 to-transparent border-amber-200" : "bg-gray-50/50 border-gray-200"} border rounded-xl overflow-hidden`}>
-                            {/* Floor header */}
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-t-xl ${hasEmpty ? "bg-gradient-to-r from-indigo-600 to-purple-600" : "bg-gradient-to-r from-slate-500 to-slate-600"}`}>
-                              <span className={`text-sm font-extrabold px-2.5 py-0.5 rounded-md text-white ${hasEmpty ? "bg-white/20" : "bg-white/15"}`}>
-                                {toBanglaNumber(floor.floorNumber)}
-                              </span>
-                              <span className="text-sm font-semibold text-white tracking-wide">
-                                {toBanglaNumber(floor.floorNumber)} তলা
-                              </span>
-                              <div className="ml-auto flex items-center gap-1.5">
-                                {hasEmpty && (
-                                  <span className="text-[10px] font-bold text-indigo-900 bg-yellow-300 px-2 py-0.5 rounded-full shadow-sm">
-                                    খালি {toBanglaNumber(emptySeatCount)}
-                                  </span>
-                                )}
-                                <span className="text-[10px] font-semibold text-white bg-white/15 px-2 py-0.5 rounded-full">
-                                  সিট {toBanglaNumber(totalSeats)}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Room grid */}
-                            <div className="p-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${capacity > 1 ? "155px" : "130px"}, 1fr))` }}>
-                              {roomsWithStatus.map(room => {
-                                if (room.isFull) {
-                                  return (
-                                    <div key={room.id} className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 opacity-60">
-                                      <div className="shrink-0">
-                                      {Array.from({ length: capacity }).map((_, idx) => (
-                                        <div key={idx} className="size-2.5 bg-emerald-500 rounded-full" />
-                                      ))}
-                                    </div>
-                                      <div className="min-w-0">
-                                        <p className="text-xs font-semibold text-emerald-700 truncate">{room.roomNumber}</p>
-                                        <p className="text-[10px] text-emerald-500 truncate">{room.activeTenants.map(t => t.name).join(", ")}</p>
-                                      </div>
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <button
-                                    key={room.id}
-                                    type="button"
-                                    className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 border-2 border-amber-300 hover:bg-amber-100 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer group"
-                                    onClick={() => {
-                                      setTBuildingId(bldg.id);
-                                      setTFloorId(floor.id);
-                                      setTRoomId(room.id);
-                                      setAddDialogTab("add");
-                                    }}
-                                  >
-                                    {/* Seat indicators */}
-                                    <div className="flex gap-1 shrink-0">
-                                      {Array.from({ length: capacity }).map((_, idx) => (
-                                        <div
-                                          key={idx}
-                                          className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[idx] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`}
-                                          title={room.activeTenants[idx]?.name || `সিট ${toBanglaNumber(idx + 1)} - খালি`}
-                                        >
-                                          {!room.activeTenants[idx] && <div className="size-1.5 bg-amber-500 rounded-full" />}
-                                        </div>
-                                      ))}
-                                    </div>
-
-                                    <div className="min-w-0 text-left">
-                                      <p className="text-xs font-bold text-amber-800 truncate">{room.roomNumber}</p>
-                                      {room.activeTenants.length > 0 && (
-                                        <p className="text-[10px] text-gray-500 truncate">{room.activeTenants.map(t => t.name).join(", ")}</p>
-                                      )}
-                                      {room.activeTenants.length === 0 && (
-                                        <p className="text-[10px] text-amber-500 font-medium">সম্পূর্ণ খালি</p>
-                                      )}
-                                    </div>
-                                    <Plus className="size-3 text-amber-400 group-hover:text-amber-600 ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Click hint */}
-                    <p className="text-center text-[10px] text-muted-foreground mt-1">
-                      খালি রুমে ক্লিক করুন — ভাড়াটে যোগ করুন
-                    </p>
-                  </div>
-                );
-              })()}
-
-              {!emptyBuildingId && (
-                <div className="text-center py-10 text-muted-foreground">
-                  <BedDouble className="size-12 mx-auto mb-3 opacity-20" />
-                  <p className="text-sm">বিল্ডিং নির্বাচন করলে খালি রুম ও সিটের তালিকা দেখা যাবে</p>
-                </div>
-              )}
-            </div>
-            )}
-
-            {addDialogTab === "add" && (
             <DialogFooter>
               <Button
                 variant="outline"
@@ -2000,7 +1779,6 @@ function TenantsTab() {
                 {addingTenant ? "যোগ হচ্ছে..." : "যোগ করুন"}
               </Button>
             </DialogFooter>
-            )}
           </DialogContent>
         </Dialog>
           )}
