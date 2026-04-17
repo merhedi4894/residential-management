@@ -60,18 +60,27 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH update building name
+// PATCH update building name and capacity
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, name } = await req.json();
+    const { id, name, capacityPerRoom } = await req.json();
 
     if (!id || !name?.trim()) {
       return NextResponse.json({ error: 'বিল্ডিং এর নাম দিন' }, { status: 400 });
     }
 
+    const data: any = { name: name.trim() };
+    if (capacityPerRoom !== undefined && capacityPerRoom !== null) {
+      const cap = parseInt(capacityPerRoom);
+      if (isNaN(cap) || cap < 1) {
+        return NextResponse.json({ error: 'সিট সংখ্যা ১ বা তার বেশি হতে হবে' }, { status: 400 });
+      }
+      data.capacityPerRoom = cap;
+    }
+
     const building = await db.building.update({
       where: { id },
-      data: { name: name.trim() },
+      data,
     });
 
     return NextResponse.json(building);

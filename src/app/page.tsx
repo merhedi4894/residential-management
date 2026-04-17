@@ -588,6 +588,7 @@ function BuildingsTab() {
   const [editBuildingOpen, setEditBuildingOpen] = useState(false);
   const [editBuildingId, setEditBuildingId] = useState("");
   const [editBuildingName, setEditBuildingName] = useState("");
+  const [editBuildingCapacity, setEditBuildingCapacity] = useState("");
   const [updatingBuilding, setUpdatingBuilding] = useState(false);
 
   // Edit room dialog
@@ -609,13 +610,21 @@ function BuildingsTab() {
     }
     setUpdatingBuilding(true);
     try {
+      const body: any = { id: editBuildingId, name: editBuildingName.trim() };
+      if (editBuildingCapacity) {
+        body.capacityPerRoom = parseInt(editBuildingCapacity);
+      }
       const res = await fetch("/api/buildings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editBuildingId, name: editBuildingName.trim() }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
-      toast.success("বিল্ডিং এর নাম আপডেট হয়েছে");
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "বিল্ডিং আপডেট করতে সমস্যা হয়েছে");
+        return;
+      }
+      toast.success("বিল্ডিং আপডেট হয়েছে");
       setEditBuildingOpen(false);
       refreshData();
     } catch {
@@ -625,9 +634,10 @@ function BuildingsTab() {
     }
   };
 
-  const openEditBuildingDialog = (buildingId: string, buildingName: string) => {
+  const openEditBuildingDialog = (buildingId: string, buildingName: string, capacityPerRoom: number) => {
     setEditBuildingId(buildingId);
     setEditBuildingName(buildingName);
+    setEditBuildingCapacity(String(capacityPerRoom || 1));
     setEditBuildingOpen(true);
   };
 
@@ -906,10 +916,10 @@ function BuildingsTab() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-blue-600">
                 <Edit3 className="size-5" />
-                বিল্ডিং এর নাম পরিবর্তন করুন
+                বিল্ডিং এডিট করুন
               </DialogTitle>
               <DialogDescription>
-                বিল্ডিং এর নতুন নাম লিখুন
+                বিল্ডিং এর নাম এবং প্রতি রুমে সিট সংখ্যা পরিবর্তন করুন
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -924,13 +934,26 @@ function BuildingsTab() {
                   autoFocus
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="editBcap">প্রতি রুমে সিট সংখ্যা</Label>
+                <Input
+                  id="editBcap"
+                  type="number"
+                  min={1}
+                  placeholder="১"
+                  value={editBuildingCapacity}
+                  onChange={(e) => setEditBuildingCapacity(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleEditBuilding(); }}
+                />
+                <p className="text-[11px] text-muted-foreground">প্রতি রুমে কয়জন ভাড়াটে থাকতে পারবে (যেমন: ১, ২, ৩...)</p>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditBuildingOpen(false)}>বাতিল</Button>
               <Button
                 className="bg-blue-600 hover:bg-blue-700 text-white"
                 onClick={handleEditBuilding}
-                disabled={updatingBuilding || !editBuildingName.trim()}
+                disabled={updatingBuilding || !editBuildingName.trim() || !editBuildingCapacity}
               >
                 {updatingBuilding ? "আপডেট হচ্ছে..." : "আপডেট করুন"}
               </Button>
@@ -1008,7 +1031,7 @@ function BuildingsTab() {
                         {building.floors?.reduce(
                           (sum, f) => sum + (f.rooms?.length || 0),
                           0
-                        )}
+                        )} • সিট: {building.capacityPerRoom || 1}
                       </p>
                     </div>
                   </div>
@@ -1017,7 +1040,7 @@ function BuildingsTab() {
                       variant="ghost"
                       size="sm"
                       className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                      onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name); }}
+                      onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name, building.capacityPerRoom); }}
                     >
                       <Edit3 className="size-4" />
                     </Button>
@@ -1651,7 +1674,7 @@ function TenantsTab() {
                       {selectedFloor?.rooms?.map((r) => (
                         <SelectItem key={r.id} value={r.id}>
                           {r.roomNumber}
-                          {r.tenants?.length > 0 && " (ভর্তি)"}
+                          {(r.tenants?.length || 0) >= (selectedBuilding?.capacityPerRoom || 1) && " (ভর্তি)"}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1986,8 +2009,7 @@ function TenantsTab() {
                   </div>
                 );
 
-                const isStuffBuilding = bldg.name.toLowerCase().includes("stuff");
-                const capacity = isStuffBuilding ? 2 : 1;
+                const capacity = bldg.capacityPerRoom || 1;
 
                 // Compute stats
                 let totalRooms = 0;
@@ -2027,7 +2049,7 @@ function TenantsTab() {
                     <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
                       <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-amber-400" /> খালি সিট</span>
                       <span className="flex items-center gap-1"><span className="inline-block size-2.5 rounded bg-emerald-500" /> ভর্তি সিট</span>
-                      {isStuffBuilding && <span className="flex items-center gap-1"><BedDouble className="size-3 text-blue-500" /> প্রতি রুমে ২ সিট</span>}
+                      {capacity > 1 && <span className="flex items-center gap-1"><BedDouble className="size-3 text-blue-500" /> প্রতি রুমে {toBanglaNumber(capacity)} সিট</span>}
                     </div>
 
                     {/* Visual Floor Plan */}
@@ -2067,20 +2089,17 @@ function TenantsTab() {
                             </div>
 
                             {/* Room grid */}
-                            <div className="p-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isStuffBuilding ? "155px" : "130px"}, 1fr))` }}>
+                            <div className="p-2 grid gap-1.5" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${capacity > 1 ? "155px" : "130px"}, 1fr))` }}>
                               {roomsWithStatus.map(room => {
                                 if (room.isFull) {
                                   return (
                                     <div key={room.id} className="flex items-center gap-2 p-2 rounded-lg bg-emerald-50/70 border border-emerald-200 opacity-60">
                                       <div className="shrink-0">
-                                        {isStuffBuilding ? (
-                                          <div className="flex gap-0.5">
-                                            <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                            <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                          </div>
-                                        ) : (
-                                          <div className="size-2.5 bg-emerald-500 rounded-full" />
-                                        )}
+                                        <div className="flex gap-0.5">
+                                          {Array.from({ length: capacity }).map((_, i) => (
+                                            <div key={i} className="size-2.5 bg-emerald-500 rounded-full" />
+                                          ))}
+                                        </div>
                                       </div>
                                       <div className="min-w-0">
                                         <p className="text-xs font-semibold text-emerald-700 truncate">{room.roomNumber}</p>
@@ -2104,20 +2123,15 @@ function TenantsTab() {
                                   >
                                     {/* Seat indicators */}
                                     <div className="flex gap-1 shrink-0">
-                                      {isStuffBuilding ? (
-                                        <>
-                                          <div className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[0] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`} title={room.activeTenants[0]?.name || "সিট ১ - খালি"}>
-                                            {!room.activeTenants[0] && <div className="size-1.5 bg-amber-500 rounded-full" />}
-                                          </div>
-                                          <div className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[1] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`} title={room.activeTenants[1]?.name || "সিট ২ - খালি"}>
-                                            {!room.activeTenants[1] && <div className="size-1.5 bg-amber-500 rounded-full" />}
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div className="size-4 rounded-full flex items-center justify-center border-2 border-dashed border-amber-400 bg-amber-100" title="সিট - খালি">
-                                          <div className="size-1.5 bg-amber-500 rounded-full" />
+                                      {Array.from({ length: capacity }).map((_, i) => (
+                                        <div
+                                          key={i}
+                                          className={`size-4 rounded-full flex items-center justify-center ${room.activeTenants[i] ? "bg-emerald-500" : "border-2 border-dashed border-amber-400 bg-amber-100"}`}
+                                          title={room.activeTenants[i]?.name || `সিট ${toBanglaNumber(i + 1)} - খালি`}
+                                        >
+                                          {!room.activeTenants[i] && <div className="size-1.5 bg-amber-500 rounded-full" />}
                                         </div>
-                                      )}
+                                      ))}
                                     </div>
 
                                     <div className="min-w-0 text-left">
