@@ -57,7 +57,16 @@ server.log
 server_*.log
 keep-alive.js
 start-server.sh
+Caddyfile
 # Skills directory
 /skills/
+# AI agent artifacts
+/agent-ctx/
+/download/
+/examples/
+/.zscripts/
+/mini-services/
+worklog.md
+bun.lock
 # Turso local DB
 db/*.db
