@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import { Facebook } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -58,14 +57,6 @@ export default function RootLayout({
             <p className="text-xs text-muted-foreground mt-0.5">
               Caretaker, EGB PLC.
             </p>
-            <a
-              href="https://www.facebook.com/mehedi.stk"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center mt-2 text-blue-600 hover:text-blue-700 transition-colors"
-            >
-              <Facebook className="h-5 w-5" />
-            </a>
           </footer>
         </div>
         <Toaster />
