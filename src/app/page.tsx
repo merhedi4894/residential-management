@@ -3290,7 +3290,7 @@ function OverviewTab() {
           </div>
 
           {/* All Rooms Mode */}
-          {data.mode === 'allRooms' && data.rooms?.map((roomData: any) => (
+          {data.mode === 'allRooms' && overviewSubTab === "tenants" && data.rooms?.map((roomData: any) => (
             <Card key={roomData.roomId}>
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center gap-2">
@@ -3318,6 +3318,34 @@ function OverviewTab() {
                     {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* All Rooms Mode — Inventory */}
+          {data.mode === 'allRooms' && overviewSubTab === "inventory" && data.rooms?.map((roomData: any) => (
+            <Card key={roomData.roomId}>
+              <CardHeader className="py-3 px-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center size-7 rounded bg-emerald-100 text-emerald-700"><Package className="size-3.5" /></div>
+                  <div>
+                    <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
+                    <p className="text-[11px] text-muted-foreground">{toBanglaNumber(roomData.floorNumber)} তলা • মালামাল: {toBanglaNumber(roomData.currentInventory?.length || 0)} টি</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                {roomData.currentInventory?.length > 0 ? (
+                  <div className="border rounded-lg overflow-hidden divide-y">
+                    {roomData.currentInventory.map((item: any) => (
+                      <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                        <span className="flex-1 truncate">{item.itemName}</span>
+                        <span className="text-xs text-muted-foreground">x{item.quantity}</span>
+                        {getConditionBadge(item.condition)}
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>}
               </CardContent>
             </Card>
           ))}
