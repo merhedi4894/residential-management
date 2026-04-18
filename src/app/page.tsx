@@ -3168,16 +3168,21 @@ function OverviewTab() {
       } else if (floorId) {
         url = `/api/room-wise-data?buildingId=${buildingId}&floorId=${floorId}`;
       }
+      console.log('[Search] URL:', url, '| buildingId:', buildingId, '| floorId:', floorId, '| roomId:', roomId);
       const res = await fetch(url);
       if (!res.ok) {
         const errData = await res.json().catch(() => null);
         throw new Error(errData?.error || `HTTP ${res.status}`);
       }
       const result = await res.json();
+      console.log('[Search] Result:', JSON.stringify(result).substring(0, 300));
+      if (result.mode === 'allRooms' && (!result.rooms || result.rooms.length === 0)) {
+        toast.info(`${selectedBuildingName} বিল্ডিং এ কোনো রুম পাওয়া যায়নি`);
+      }
       setData(result);
       setSearched(true); setPrevPage(1);
     } catch (err: any) {
-      console.error('Search error:', err);
+      console.error('[Search] Error:', err);
       toast.error(err?.message || "তথ্য লোড করতে সমস্যা হয়েছে");
     } finally { setSearchLoading(false); }
   };

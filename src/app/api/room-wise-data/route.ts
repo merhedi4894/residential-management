@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 // GET room-wise data: current + previous tenants and inventory
-// Query params: roomId (single room) OR buildingId (all rooms in building)
+// Query params: roomId (single room) OR buildingId (all rooms in building) [optional floorId]
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -12,16 +12,29 @@ export async function GET(req: NextRequest) {
 
     // Building-wide mode: return all rooms data (optionally filtered by floor)
     if (buildingId && !roomId) {
-      const roomWhere: any = { floor: { buildingId } };
+      // Step 1: Get floor IDs (simpler query for Turso compatibility)
+      const floorFilter: any = { buildingId };
       if (floorId) {
-        roomWhere.floorId = floorId;
+        floorFilter.id = floorId;
+      }
+      const floors = await db.floor.findMany({
+        where: floorFilter,
+        select: { id: true },
+      });
+      const floorIds = floors.map((f) => f.id);
+
+      if (floorIds.length === 0) {
+        return NextResponse.json({ mode: 'allRooms', rooms: [] });
       }
 
+      // Step 2: Get rooms using flat floorId filter
       const rooms = await db.room.findMany({
-        where: roomWhere,
+        where: { floorId: { in: floorIds } },
         include: { floor: { select: { floorNumber: true, buildingId: true } } },
         orderBy: { createdAt: 'asc' },
       });
+
+      console.log(`[room-wise-data] buildingId=${buildingId}, floorId=${floorId || 'all'}, found ${rooms.length} rooms`);
 
       const allRoomData = await Promise.all(rooms.map(async (room) => {
         const allTenants = await db.tenant.findMany({
@@ -182,6 +195,7 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (error) {
+    console.error('[room-wise-data] Error:', error);
     return NextResponse.json(
       { error: 'তথ্য লোড করতে সমস্যা হয়েছে' },
       { status: 500 }
