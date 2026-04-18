@@ -3289,66 +3289,105 @@ function OverviewTab() {
             </div>
           </div>
 
-          {/* All Rooms Mode */}
-          {data.mode === 'allRooms' && overviewSubTab === "tenants" && data.rooms?.map((roomData: any) => (
-            <Card key={roomData.roomId}>
-              <CardHeader className="py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center size-7 rounded bg-emerald-100 text-emerald-700"><BedDouble className="size-3.5" /></div>
-                  <div>
-                    <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
-                    <p className="text-[11px] text-muted-foreground">{toBanglaNumber(roomData.floorNumber)} তলা • বর্তমান ভাড়াটে: {toBanglaNumber(roomData.currentTenants?.length || 0)} জন</p>
-                  </div>
+          {/* All Rooms Mode — Tenants (grouped by floor) */}
+          {data.mode === 'allRooms' && overviewSubTab === "tenants" && (() => {
+            const floorMap: Record<number, any[]> = {};
+            (data.rooms || []).forEach((roomData: any) => {
+              const fn = roomData.floorNumber || 0;
+              if (!floorMap[fn]) floorMap[fn] = [];
+              floorMap[fn].push(roomData);
+            });
+            const sortedFloors = Object.keys(floorMap).sort((a, b) => Number(a) - Number(b));
+            return sortedFloors.map((floorNum) => (
+              <div key={floorNum} className="space-y-3">
+                <div className="flex items-center gap-2 pt-2">
+                  <Building2 className="size-4 text-emerald-600" />
+                  <span className="text-sm font-semibold text-emerald-700">{toBanglaNumber(floorNum)} তলা</span>
+                  <div className="flex-1 border-t border-emerald-200" />
                 </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4 space-y-2">
-                {roomData.currentTenants?.length > 0 ? roomData.currentTenants.map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2">
-                    <div className="w-7 h-7 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">{t.name.charAt(0)}</div>
-                    <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
-                  </div>
-                )) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো ভাড়াটে নেই</p>}
-                {roomData.previousTenants?.length > 0 && (
-                  <div className="mt-1"><span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({roomData.previousTenants.length})</span>
-                    {roomData.previousTenants.slice(0, 3).map((t: any) => (
-                      <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <span>{t.name}</span><span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
+                {floorMap[Number(floorNum)].map((roomData: any) => (
+                <Card key={roomData.roomId}>
+                  <CardHeader className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-center size-7 rounded bg-emerald-100 text-emerald-700"><BedDouble className="size-3.5" /></div>
+                      <div>
+                        <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
+                        <p className="text-[11px] text-muted-foreground">বর্তমান ভাড়াটে: {toBanglaNumber(roomData.currentTenants?.length || 0)} জন</p>
                       </div>
-                    ))}
-                    {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 space-y-2">
+                    {roomData.currentTenants?.length > 0 ? roomData.currentTenants.map((t: any) => (
+                      <div key={t.id} className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2">
+                        <div className="w-7 h-7 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">{t.name.charAt(0)}</div>
+                        <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
+                      </div>
+                    )) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো ভাড়াটে নেই</p>}
+                    {roomData.previousTenants?.length > 0 && (
+                      <div className="mt-1"><span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({roomData.previousTenants.length})</span>
+                        {roomData.previousTenants.slice(0, 3).map((t: any) => (
+                          <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                            <span>{t.name}</span><span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
+                          </div>
+                        ))}
+                        {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                ))}
+              </div>
+            ));
+          })()}
 
-          {/* All Rooms Mode — Inventory */}
-          {data.mode === 'allRooms' && overviewSubTab === "inventory" && data.rooms?.map((roomData: any) => (
-            <Card key={roomData.roomId}>
-              <CardHeader className="py-3 px-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center justify-center size-7 rounded bg-emerald-100 text-emerald-700"><Package className="size-3.5" /></div>
-                  <div>
-                    <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
-                    <p className="text-[11px] text-muted-foreground">{toBanglaNumber(roomData.floorNumber)} তলা • মালামাল: {toBanglaNumber(roomData.currentInventory?.length || 0)} টি</p>
-                  </div>
+          {/* All Rooms Mode — Inventory (grouped by floor) */}
+          {data.mode === 'allRooms' && overviewSubTab === "inventory" && (() => {
+            // Group rooms by floor
+            const floorMap: Record<number, any[]> = {};
+            (data.rooms || []).forEach((roomData: any) => {
+              const fn = roomData.floorNumber || 0;
+              if (!floorMap[fn]) floorMap[fn] = [];
+              floorMap[fn].push(roomData);
+            });
+            const sortedFloors = Object.keys(floorMap).sort((a, b) => Number(a) - Number(b));
+            return sortedFloors.map((floorNum) => (
+              <div key={floorNum} className="space-y-3">
+                <div className="flex items-center gap-2 pt-2">
+                  <Building2 className="size-4 text-emerald-600" />
+                  <span className="text-sm font-semibold text-emerald-700">{toBanglaNumber(floorNum)} তলা</span>
+                  <div className="flex-1 border-t border-emerald-200" />
                 </div>
-              </CardHeader>
-              <CardContent className="px-4 pb-4">
-                {roomData.currentInventory?.length > 0 ? (
-                  <div className="border rounded-lg overflow-hidden divide-y">
-                    {roomData.currentInventory.map((item: any) => (
-                      <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                        <span className="flex-1 truncate">{item.itemName}</span>
-                        <span className="text-xs text-muted-foreground">x{item.quantity}</span>
-                        {getConditionBadge(item.condition)}
-                      </div>
-                    ))}
-                  </div>
-                ) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>}
-              </CardContent>
-            </Card>
-          ))}
+                {floorMap[Number(floorNum)].map((roomData: any) => {
+                  const allItems = [...(roomData.currentInventory || []), ...(roomData.previousInventory || [])];
+                  const uniqueItems = Array.from(new Map(allItems.map((item: any) => [item.id, item])).values());
+                  return (
+                    <Card key={roomData.roomId}>
+                      <CardHeader className="py-2 px-4">
+                        <div className="flex items-center gap-2">
+                          <BedDouble className="size-3.5 text-gray-500" />
+                          <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
+                          <Badge variant="secondary" className="text-[10px] h-5 px-1.5">মালামাল: {toBanglaNumber(uniqueItems.length)}</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="px-4 pb-3">
+                        {uniqueItems.length > 0 ? (
+                          <div className="border rounded-lg overflow-hidden divide-y">
+                            {uniqueItems.map((item: any) => (
+                              <div key={item.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                                <span className="flex-1 truncate">{item.itemName}</span>
+                                <span className="text-xs text-muted-foreground">x{item.quantity}</span>
+                                {getConditionBadge(item.condition)}
+                              </div>
+                            ))}
+                          </div>
+                        ) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ));
+          })()}
 
           {/* Single Room Mode — existing content */}
           {data.mode !== 'allRooms' && (<>
