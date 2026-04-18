@@ -3159,15 +3159,27 @@ function OverviewTab() {
   const selectedFloorNumber = selectedFloor?.floorNumber || null;
 
   const handleSearch = async () => {
-    if (!roomId && !buildingId) { toast.error("বিল্ডিং এবং রুম নির্বাচন করুন"); return; }
+    if (!buildingId) { toast.error("বিল্ডিং নির্বাচন করুন"); return; }
     try {
       setSearchLoading(true);
-      const url = roomId ? `/api/room-wise-data?roomId=${roomId}` : `/api/room-wise-data?buildingId=${buildingId}`;
+      let url = `/api/room-wise-data?buildingId=${buildingId}`;
+      if (roomId) {
+        url = `/api/room-wise-data?roomId=${roomId}`;
+      } else if (floorId) {
+        url = `/api/room-wise-data?buildingId=${buildingId}&floorId=${floorId}`;
+      }
       const res = await fetch(url);
-      if (!res.ok) throw new Error();
-      setData(await res.json());
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `HTTP ${res.status}`);
+      }
+      const result = await res.json();
+      setData(result);
       setSearched(true); setPrevPage(1);
-    } catch { toast.error("তথ্য লোড করতে সমস্যা হয়েছে"); } finally { setSearchLoading(false); }
+    } catch (err: any) {
+      console.error('Search error:', err);
+      toast.error(err?.message || "তথ্য লোড করতে সমস্যা হয়েছে");
+    } finally { setSearchLoading(false); }
   };
 
   const [vacateTenantId, setVacateTenantId] = useState<string | null>(null);
@@ -3226,7 +3238,7 @@ function OverviewTab() {
               <Package className="size-3.5" />মালামাল
             </button>
           </div>
-          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || (!roomId && !buildingId)}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || !buildingId}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
         </div>
       </CardContent></Card>
       {!searched && (<Alert><Search className="size-4" /><AlertDescription>বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন</AlertDescription></Alert>)}

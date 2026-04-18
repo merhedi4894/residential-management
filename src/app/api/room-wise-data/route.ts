@@ -8,11 +8,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const roomId = searchParams.get('roomId');
     const buildingId = searchParams.get('buildingId');
+    const floorId = searchParams.get('floorId');
 
-    // Building-wide mode: return all rooms data
+    // Building-wide mode: return all rooms data (optionally filtered by floor)
     if (buildingId && !roomId) {
+      const roomWhere: any = { floor: { buildingId } };
+      if (floorId) {
+        roomWhere.floorId = floorId;
+      }
+
       const rooms = await db.room.findMany({
-        where: { floor: { buildingId } },
+        where: roomWhere,
         include: { floor: { select: { floorNumber: true, buildingId: true } } },
         orderBy: { createdAt: 'asc' },
       });
