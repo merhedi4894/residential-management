@@ -167,6 +167,30 @@ interface Guest {
   updatedAt: string;
 }
 
+// ── Error Boundary ──────────────────────────────────────────────────────────
+
+class TabErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Card className="border-red-200 bg-red-50"><CardContent className="p-6 text-center">
+          <p className="text-red-600 font-medium mb-2">একটি ত্রুটি ঘটেছে</p>
+          <p className="text-red-400 text-xs mb-3">{this.state.error?.message}</p>
+          <Button variant="outline" size="sm" onClick={() => this.setState({ hasError: false, error: null })}>আবার চেষ্টা করুন</Button>
+        </CardContent></Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Helper ───────────────────────────────────────────────────────────────
 
 function toBanglaNumber(num: number | string): string {
@@ -541,19 +565,19 @@ function MainTabs() {
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">
-        <BuildingsTab />
+        <TabErrorBoundary><BuildingsTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        {visitedTabs.has("tenants") && <TenantsTab />}
+        {visitedTabs.has("tenants") && <TabErrorBoundary><TenantsTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        {visitedTabs.has("overview") && <OverviewTab />}
+        {visitedTabs.has("overview") && <TabErrorBoundary><OverviewTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        {visitedTabs.has("troubles") && <TroublesTab />}
+        {visitedTabs.has("troubles") && <TabErrorBoundary><TroublesTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="belongings" className="mt-6">
-        {visitedTabs.has("belongings") && <BelongingsTab />}
+        {visitedTabs.has("belongings") && <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>}
       </TabsContent>
     </Tabs>
   );
@@ -3222,8 +3246,8 @@ function OverviewTab() {
   const handleDeleteInventory = async (id: string) => { setDeletingInv(true); try { const res = await fetch("/api/inventory", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) }); if (!res.ok) throw new Error(); toast.success("মালামাল মুছে ফেলা হয়েছে"); handleSearch(); } catch { toast.error("মালামাল মুছে ফেলতে সমস্যা হয়েছে"); } finally { setDeletingInv(false); } };
   const handleAddInventory = async () => { if (!addInvName.trim() || !data) { toast.error("মালামালের নাম দিন"); return; } setAddingInv(true); try { const res = await fetch("/api/inventory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemName: addInvName.trim(), quantity: parseInt(addInvQty) || 1, condition: addInvCondition, roomNumber: data.roomNumber, tenantId: addInvTenantId || null, roomId, note: addInvNote.trim() || null }) }); const resData = await res.json(); if (!res.ok) { toast.error(resData.error || "মালামাল যোগ করতে সমস্যা"); return; } toast.success("মালামাল যোগ হয়েছে"); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(false); handleSearch(); } catch { toast.error("মালামাল যোগ করতে সমস্যা"); } finally { setAddingInv(false); } };
 
-  const totalPrevPages = data ? Math.ceil(data.previousTenants.length / prevPerPage) : 0;
-  const paginatedPrevTenants = data?.previousTenants.slice((prevPage - 1) * prevPerPage, prevPage * prevPerPage) || [];
+  const totalPrevPages = data ? Math.ceil((data.previousTenants?.length || 0) / prevPerPage) : 0;
+  const paginatedPrevTenants = data?.previousTenants?.slice((prevPage - 1) * prevPerPage, prevPage * prevPerPage) || [];
 
   return (
     <div className="space-y-4">
@@ -3256,7 +3280,7 @@ function OverviewTab() {
                 <BedDouble className="size-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold">{data.mode === 'allRooms' ? `সকল রুমের তালিকা (${toBanglaNumber(data.rooms?.length || 0)} টি রুম)` : `রুম: ${data.roomNumber}`}</p>
+                <p className="font-semibold">{data.mode === 'allRooms' ? `সকল রুমের তালিকা (${toBanglaNumber(data.rooms?.length || 0)} টি রুম)` : `রুম: ${data.roomNumber || ''}`}</p>
                 <p className="text-xs text-muted-foreground">
                   বিল্ডিং: {selectedBuildingName}
                   {data.mode !== 'allRooms' && selectedFloorNumber !== null && ` • তলা: ${toBanglaNumber(selectedFloorNumber)} তলা`}
@@ -3304,9 +3328,9 @@ function OverviewTab() {
           {overviewSubTab === "tenants" && (
           <div>
             <h3 className="text-sm font-semibold flex items-center gap-1.5 mb-2 text-emerald-700"><Users className="size-3.5" /> ভাড়াটে তালিকা</h3>
-            {data.currentTenants.length > 0 ? (
+            {data.currentTenants?.length > 0 ? (
               <div className="space-y-2 mb-3">
-                {data.currentTenants.map((tenant) => (
+                {(data.currentTenants || []).map((tenant) => (
                   <div key={tenant.id} className="bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-sm font-bold shrink-0">{tenant.name.charAt(0)}</div>
@@ -3325,9 +3349,9 @@ function OverviewTab() {
               </div>
             ) : (<p className="text-sm text-muted-foreground bg-gray-50 rounded-lg px-3 py-2 mb-3">এই রুমে বর্তমানে কোনো ভাড়াটে নেই</p>)}
 
-            {data.previousTenants.length > 0 && (
+            {data.previousTenants?.length > 0 && (
               <div>
-                <div className="flex items-center gap-1.5 mb-2"><span className="text-xs font-semibold text-gray-600">পূর্বের ভাড়াটেগণ</span><Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.previousTenants.length}</Badge></div>
+                <div className="flex items-center gap-1.5 mb-2"><span className="text-xs font-semibold text-gray-600">পূর্বের ভাড়াটেগণ</span><Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.previousTenants?.length}</Badge></div>
                 <div className="space-y-1.5">
                   {paginatedPrevTenants.map((tenant) => {
                     const vacateRecord = data.vacateRecords?.find((vr) => vr.tenantId === tenant.id);
@@ -3363,8 +3387,8 @@ function OverviewTab() {
           {/* মালামাল তালিকা — only when inventory sub-tab selected */}
           {overviewSubTab === "inventory" && (
           <div>
-            <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Package className="size-3.5" /> মালামাল তালিকা<Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.currentInventory.length}</Badge></h3><Button size="sm" className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-2" onClick={() => { setAddInvTenantId(data.currentTenants?.[0]?.id || ""); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(true); }}><Plus className="size-2.5" />যোগ</Button></div>
-            {data.currentInventory.length === 0 ? (<p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>) : (<div className="bg-white border rounded-lg overflow-hidden divide-y">{data.currentInventory.map((item) => (<div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group"><span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span><span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span><div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}><Edit3 className="size-2.5" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="size-2.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)} disabled={deletingInv}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></div>))}</div>)}
+            <div className="flex items-center justify-between mb-2"><h3 className="text-sm font-semibold flex items-center gap-1.5 text-emerald-700"><Package className="size-3.5" /> মালামাল তালিকা<Badge variant="secondary" className="text-[10px] h-4 px-1.5">{data.currentInventory?.length || 0}</Badge></h3><Button size="sm" className="h-6 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-2" onClick={() => { setAddInvTenantId(data.currentTenants?.[0]?.id || ""); setAddInvName(""); setAddInvQty("1"); setAddInvCondition("ভালো"); setAddInvNote(""); setAddInvOpen(true); }}><Plus className="size-2.5" />যোগ</Button></div>
+            {(data.currentInventory?.length || 0) === 0 ? (<p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>) : (<div className="bg-white border rounded-lg overflow-hidden divide-y">{(data.currentInventory || []).map((item) => (<div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group"><span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span><span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span><div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}><Edit3 className="size-2.5" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="size-2.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)} disabled={deletingInv}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></div>))}</div>)}
           </div>
           )}
           </>)}
