@@ -13,12 +13,11 @@ export async function GET(req: NextRequest) {
     // ── Building-wide mode ────────────────────────────────────────────
     if (buildingId && !roomId) {
       // Use the SAME include pattern as /api/buildings (proven to work)
-      // but with ALL tenants (not just active)
-      const buildings = await db.building.findMany({
+      // Fetch building with nested floors, rooms, tenants
+      const building = await db.building.findUnique({
         where: { id: buildingId },
         include: {
           floors: {
-            where: floorId ? { id: floorId } : undefined,
             include: {
               rooms: {
                 include: {
@@ -31,15 +30,17 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      const building = buildings[0];
       if (!building || !building.floors || building.floors.length === 0) {
-        console.log(`[room-wise-data] No building/floors found for buildingId=${buildingId}, floorId=${floorId || 'all'}`);
+        console.log(`[room-wise-data] No building/floors found for buildingId=${buildingId}`);
         return NextResponse.json({ mode: 'allRooms', rooms: [] });
       }
 
       const allRoomData = [];
 
       for (const floor of building.floors) {
+        // Skip floors if a specific floor was requested
+        if (floorId && floor.id !== floorId) continue;
+
         if (!floor.rooms) continue;
         for (const room of floor.rooms) {
           const allTenants = room.tenants || [];
@@ -92,34 +93,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'রুম আইডি দিন' }, { status: 400 });
     }
 
-    // Use the SAME include pattern as /api/buildings but for a single room
-    const buildings = await db.building.findMany({
+    const room = await db.room.findUnique({
+      where: { id: roomId },
       include: {
-        floors: {
-          include: {
-            rooms: {
-              where: { id: roomId },
-              include: {
-                tenants: { orderBy: { createdAt: 'desc' } },
-              },
-            },
-          },
-        },
+        floor: { select: { floorNumber: true } },
+        tenants: { orderBy: { createdAt: 'desc' } },
       },
     });
-
-    let room = null;
-    let foundFloorNumber: number | null = null;
-    for (const b of buildings) {
-      for (const f of b.floors) {
-        if (f.rooms && f.rooms.length > 0) {
-          room = f.rooms[0];
-          foundFloorNumber = f.floorNumber;
-          break;
-        }
-      }
-      if (room) break;
-    }
 
     if (!room) {
       return NextResponse.json({ error: 'রুম পাওয়া যায়নি' }, { status: 404 });
