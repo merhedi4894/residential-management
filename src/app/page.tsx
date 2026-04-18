@@ -1608,7 +1608,7 @@ function TenantsTab() {
       const headerFont = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
       const border = { bottom: { style: "thin", color: { argb: "FF000000" } } };
 
-      const headers = ["ক্রম", "বিল্ডিং নাম", "নাম", "পদবী", "রুম নম্বর", "ফোন", "শুরুর তারিখ", "অবস্থা"];
+      const headers = ["ক্রম", "বিল্ডিং নাম", "নাম", "পদবী", "রুম নম্বর", "ফোন", "শুরুর তারিখ", "রুম ছাড়ার তারিখ", "অবস্থা"];
       const headerRow = sheet.addRow(headers);
       headerRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; cell.border = border; cell.alignment = { horizontal: "center", vertical: "middle" }; });
       headerRow.height = 28;
@@ -1622,6 +1622,7 @@ function TenantsTab() {
           t.room?.roomNumber || "-",
           t.phone || "-",
           t.startDate ? new Date(t.startDate).toLocaleDateString("bn-BD") : "-",
+          t.endDate ? new Date(t.endDate).toLocaleDateString("bn-BD") : "-",
           t.isActive ? "সক্রিয়" : "অসক্রিয়",
         ]);
         row.eachCell((cell, colNumber) => {
@@ -2758,6 +2759,17 @@ function TroublesTab() {
   // Loading states
   const [creatingTrouble, setCreatingTrouble] = useState(false);
   const [resolvingTrouble, setResolvingTrouble] = useState(false);
+  const [deletingTrouble, setDeletingTrouble] = useState(false);
+
+  // Edit trouble dialog
+  const [editTroubleOpen, setEditTroubleOpen] = useState(false);
+  const [editTroubleData, setEditTroubleData] = useState<{ id: string; description: string; reportedBy: string }>({ id: "", description: "", reportedBy: "" });
+  const [savingTrouble, setSavingTrouble] = useState(false);
+
+  // Delete trouble dialog
+  const [deleteTroubleId, setDeleteTroubleId] = useState("");
+  const [deleteTroubleDesc, setDeleteTroubleDesc] = useState("");
+  const [deleteTroubleOpen, setDeleteTroubleOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -2830,6 +2842,75 @@ function TroublesTab() {
   const removeRsItem = useCallback((idx: number) => setRsNewItems((prev) => prev.filter((_, i) => i !== idx)), []);
   const updateRsItem = useCallback((idx: number, field: string, value: string) => setRsNewItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))), []);
 
+  // Edit trouble handler
+  const openEditTrouble = (report: TroubleReport) => {
+    setEditTroubleData({ id: report.id, description: report.description, reportedBy: report.reportedBy });
+    setEditTroubleOpen(true);
+  };
+  const handleSaveTrouble = async () => {
+    if (!editTroubleData.description.trim()) { toast.error("বিবরণ দিন"); return; }
+    setSavingTrouble(true);
+    try {
+      const res = await fetch("/api/troubles", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editTroubleData.id, description: editTroubleData.description.trim(), reportedBy: editTroubleData.reportedBy.trim() }) });
+      if (!res.ok) throw new Error();
+      toast.success("রিপোর্ট আপডেট হয়েছে");
+      setEditTroubleOpen(false);
+      loadData();
+    } catch { toast.error("আপডেট করতে সমস্যা হয়েছে"); } finally { setSavingTrouble(false); }
+  };
+
+  // Delete trouble handler
+  const openDeleteTrouble = (report: TroubleReport) => {
+    setDeleteTroubleId(report.id);
+    setDeleteTroubleDesc(report.description);
+    setDeleteTroubleOpen(true);
+  };
+  const handleDeleteTrouble = async () => {
+    setDeletingTrouble(true);
+    try {
+      const res = await fetch("/api/troubles", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: deleteTroubleId }) });
+      if (!res.ok) throw new Error();
+      toast.success("রিপোর্ট মুছে ফেলা হয়েছে");
+      setDeleteTroubleOpen(false);
+      loadData();
+    } catch { toast.error("মুছে ফেলতে সমস্যা হয়েছে"); } finally { setDeletingTrouble(false); }
+  };
+
+  // XLSX download for trouble reports
+  const handleDownloadTroubles = async () => {
+    const filtered = getFilteredReports();
+    if (filtered.length === 0) { toast.error("ডাউনলোড করার মতো কোনো রিপোর্ট নেই"); return; }
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("ট্রাবল রিপোর্ট");
+      const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF22C55E" } };
+      const headerFont = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      const border = { bottom: { style: "thin", color: { argb: "FF000000" } } };
+      const headers = ["ক্রম", "রুম", "বিবরণ", "প্রতিবেদক", "রিপোর্টের তারিখ", "অবস্থা", "সমাধানকারী", "সমাধানের তারিখ", "সমাধানের বিবরণ"];
+      const headerRow = sheet.addRow(headers);
+      headerRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; cell.border = border; cell.alignment = { horizontal: "center", vertical: "middle" }; });
+      headerRow.height = 28;
+      filtered.forEach((r, idx) => {
+        const row = sheet.addRow([idx + 1, r.roomNumber, r.description, r.reportedBy, r.reportedAt ? new Date(r.reportedAt).toLocaleDateString("bn-BD") : "-", r.status, r.resolvedBy || "-", r.resolvedAt ? new Date(r.resolvedAt).toLocaleDateString("bn-BD") : "-", r.resolutionNote || "-"]);
+        row.eachCell((cell, colNumber) => { cell.border = border; cell.alignment = { horizontal: colNumber <= 1 ? "center" : "left", vertical: "middle" }; });
+      });
+      sheet.columns.forEach((col) => { col.width = 18; });
+      sheet.getColumn(1).width = 6;
+      sheet.getColumn(3).width = 30;
+      sheet.getColumn(9).width = 25;
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ট্রাবল_রিপোর্ট${searchMonth ? `_${BENGALI_MONTHS[parseInt(searchMonth) - 1]?.label}` : ""}${searchYear ? `_${searchYear}` : ""}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("XLSX ডাউনলোড হয়েছে");
+    } catch { toast.error("ডাউনলোড করতে সমস্যা হয়েছে"); }
+  };
+
   if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /></div>);
 
   const Pagination = ({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) => {
@@ -2885,6 +2966,7 @@ function TroublesTab() {
             </SelectContent>
           </Select>
           {(searchMonth || searchYear) && (<Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setSearchMonth(""); setSearchYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>)}
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={handleDownloadTroubles}><Download className="size-3" />XLSX ডাউনলোড</Button>
         </div>
       </CardContent></Card>
 
@@ -2903,11 +2985,11 @@ function TroublesTab() {
         paginatedPending.length === 0 ? (
           <Alert><Clock className="size-4" /><AlertDescription>কোনো পেন্ডিং ট্রাবল রিপোর্ট নেই।</AlertDescription></Alert>
         ) : (<>
-          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-orange-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>অবস্থা</TableHead><TableHead>অ্যাকশন</TableHead></TableRow></TableHeader><TableBody>
-            {paginatedPending.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{getStatusBadge(report.status)}</TableCell><TableCell><Button variant="outline" size="sm" className="gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button></TableCell></TableRow>))}
+          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-orange-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>অবস্থা</TableHead><TableHead className="text-center">অ্যাকশন</TableHead></TableRow></TableHeader><TableBody>
+            {paginatedPending.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{getStatusBadge(report.status)}</TableCell><TableCell><div className="flex items-center justify-center gap-1"><Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => openEditTrouble(report)} title="এডিট"><Edit3 className="size-3.5" /></Button><Button variant="outline" size="sm" className="gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50 text-[11px]" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button><Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => openDeleteTrouble(report)} title="মুছুন"><Trash2 className="size-3.5" /></Button></div></TableCell></TableRow>))}
           </TableBody></Table></CardContent></Card>
           <div className="md:hidden space-y-3">
-            {paginatedPending.map((report) => (<Card key={report.id}><CardContent className="p-4"><div className="flex items-start justify-between gap-2"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><BedDouble className="size-3.5 text-emerald-600" /><span className="font-semibold">রুম: {report.roomNumber}</span></div><p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p><div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground"><span>প্রতিবেদক: {report.reportedBy}</span><span>{formatDate(report.reportedAt)}</span></div></div><div>{getStatusBadge(report.status)}</div></div><Button variant="outline" size="sm" className="mt-3 w-full gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button></CardContent></Card>))}
+            {paginatedPending.map((report) => (<Card key={report.id}><CardContent className="p-4"><div className="flex items-start justify-between gap-2"><div className="flex-1"><div className="flex items-center gap-2 mb-1"><BedDouble className="size-3.5 text-emerald-600" /><span className="font-semibold">রুম: {report.roomNumber}</span></div><p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p><div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground"><span>প্রতিবেদক: {report.reportedBy}</span><span>{formatDate(report.reportedAt)}</span></div></div><div className="flex gap-1 shrink-0"><Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => openEditTrouble(report)}><Edit3 className="size-3.5" /></Button><Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => openDeleteTrouble(report)}><Trash2 className="size-3.5" /></Button><div>{getStatusBadge(report.status)}</div></div></div><Button variant="outline" size="sm" className="mt-3 w-full gap-1 text-emerald-600 border-emerald-300 hover:bg-emerald-50" onClick={() => { setResolveReport(report); setRsNote(""); setRsResolvedBy(""); setRsNewItems([]); setResolveOpen(true); }}><CheckCircle2 className="size-3" />সমাধান</Button></CardContent></Card>))}
           </div>
           <Pagination page={pendingPage} totalPages={totalPendingPages} onPageChange={setPendingPage} />
         </>)
@@ -2918,8 +3000,8 @@ function TroublesTab() {
         paginatedSolved.length === 0 ? (
           <Alert><CheckCircle2 className="size-4" /><AlertDescription>কোনো সমাধান হওয়া রিপোর্ট নেই।</AlertDescription></Alert>
         ) : (<>
-          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-emerald-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>সমাধানকারী</TableHead><TableHead>সমাধানের তারিখ</TableHead></TableRow></TableHeader><TableBody>
-            {paginatedSolved.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{report.resolvedBy || "-"}</TableCell><TableCell className="text-sm text-muted-foreground">{report.resolvedAt ? formatDate(report.resolvedAt) : "-"}</TableCell></TableRow>))}
+          <Card className="hidden md:block"><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-emerald-50/50"><TableHead>রুম</TableHead><TableHead>বিবরণ</TableHead><TableHead>প্রতিবেদক</TableHead><TableHead>তারিখ</TableHead><TableHead>সমাধানকারী</TableHead><TableHead>সমাধানের তারিখ</TableHead><TableHead className="text-center">অ্যাকশন</TableHead></TableRow></TableHeader><TableBody>
+            {paginatedSolved.map((report) => (<TableRow key={report.id}><TableCell className="font-medium">{report.roomNumber}</TableCell><TableCell className="max-w-xs truncate">{report.description}</TableCell><TableCell>{report.reportedBy}</TableCell><TableCell className="text-sm text-muted-foreground">{formatDate(report.reportedAt)}</TableCell><TableCell>{report.resolvedBy || "-"}</TableCell><TableCell className="text-sm text-muted-foreground">{report.resolvedAt ? formatDate(report.resolvedAt) : "-"}</TableCell><TableCell><div className="flex items-center justify-center gap-1"><Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => openEditTrouble(report)} title="এডিট"><Edit3 className="size-3.5" /></Button><Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => openDeleteTrouble(report)} title="মুছুন"><Trash2 className="size-3.5" /></Button></div></TableCell></TableRow>))}
           </TableBody></Table></CardContent></Card>
           <div className="md:hidden space-y-3">
             {paginatedSolved.map((report) => (<Card key={report.id}><CardContent className="p-4"><div className="flex items-center gap-2 mb-1"><BedDouble className="size-3.5 text-emerald-600" /><span className="font-semibold">রুম: {report.roomNumber}</span><span className="ml-auto">{getStatusBadge(report.status)}</span></div><p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p>{report.resolutionNote && (<p className="text-xs text-emerald-700 mt-1 bg-emerald-50 rounded px-2 py-1">সমাধান: {report.resolutionNote}</p>)}<div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground"><span>প্রতিবেদক: {report.reportedBy}</span><span>সমাধানকারী: {report.resolvedBy || "-"}</span></div><div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground"><span>তারিখ: {formatDate(report.reportedAt)}</span>{report.resolvedAt && <span>সমাধান: {formatDate(report.resolvedAt)}</span>}</div></CardContent></Card>))}
@@ -2927,6 +3009,38 @@ function TroublesTab() {
           <Pagination page={solvedPage} totalPages={totalSolvedPages} onPageChange={setSolvedPage} />
         </>)
       )}
+
+      {/* Edit Trouble Dialog */}
+      <Dialog open={editTroubleOpen} onOpenChange={setEditTroubleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600"><Edit3 className="size-5" />রিপোর্ট এডিট করুন</DialogTitle>
+            <DialogDescription>ট্রাবল রিপোর্টের বিবরণ বা প্রতিবেদকের নাম পরিবর্তন করুন</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2"><Label>সমস্যার বিবরণ</Label><Textarea value={editTroubleData.description} onChange={(e) => setEditTroubleData(prev => ({ ...prev, description: e.target.value }))} rows={3} /></div>
+            <div className="space-y-2"><Label>প্রতিবেদকের নাম</Label><Input value={editTroubleData.reportedBy} onChange={(e) => setEditTroubleData(prev => ({ ...prev, reportedBy: e.target.value }))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTroubleOpen(false)}>বাতিল</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveTrouble} disabled={savingTrouble}>{savingTrouble ? "সেভ হচ্ছে..." : "সেভ করুন"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Trouble Dialog */}
+      <Dialog open={deleteTroubleOpen} onOpenChange={setDeleteTroubleOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-red-600">রিপোর্ট মুছে ফেলবেন?</DialogTitle>
+            <DialogDescription>&quot;{deleteTroubleDesc}&quot; — এই ট্রাবল রিপোর্ট স্থায়ীভাবে মুছে যাবে।</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTroubleOpen(false)}>বাতিল</Button>
+            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteTrouble} disabled={deletingTrouble}>{deletingTrouble ? "মুছে ফেলা হচ্ছে..." : "মুছে ফেলুন"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Resolve dialog */}
       <Dialog open={resolveOpen} onOpenChange={setResolveOpen}>
@@ -3009,7 +3123,7 @@ function OverviewTab() {
   const [roomId, setRoomId] = useState("");
   const [searched, setSearched] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [data, setData] = useState<RoomWiseData | null>(null);
+  const [data, setData] = useState<(RoomWiseData & { mode?: string; rooms?: any[] }) | null>(null);
   const [overviewSubTab, setOverviewSubTab] = useState<"tenants" | "inventory">("tenants");
   const [prevPage, setPrevPage] = useState(1);
   const prevPerPage = 10;
@@ -3045,10 +3159,11 @@ function OverviewTab() {
   const selectedFloorNumber = selectedFloor?.floorNumber || null;
 
   const handleSearch = async () => {
-    if (!roomId) { toast.error("বিল্ডিং এবং রুম নির্বাচন করুন"); return; }
+    if (!roomId && !buildingId) { toast.error("বিল্ডিং এবং রুম নির্বাচন করুন"); return; }
     try {
       setSearchLoading(true);
-      const res = await fetch(`/api/room-wise-data?roomId=${roomId}`);
+      const url = roomId ? `/api/room-wise-data?roomId=${roomId}` : `/api/room-wise-data?buildingId=${buildingId}`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error();
       setData(await res.json());
       setSearched(true); setPrevPage(1);
@@ -3099,8 +3214,8 @@ function OverviewTab() {
       <Card><CardContent className="p-4 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="space-y-1.5"><Label>বিল্ডিং নির্বাচন</Label><Select value={buildingId} onValueChange={(v) => { setBuildingId(v); setFloorId(""); setRoomId(""); setSearched(false); setData(null); }}><SelectTrigger className="w-full"><SelectValue placeholder="বিল্ডিং বেছে নিন" /></SelectTrigger><SelectContent>{buildings.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent></Select></div>
-          <div className="space-y-1.5"><Label>তলা নির্বাচন</Label><Select value={floorId} onValueChange={(v) => { setFloorId(v); setRoomId(""); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger><SelectContent>{selectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
-          <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId} onValueChange={(v) => { setRoomId(v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : floorId ? "তলা নির্বাচিত" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent>{floorId ? (selectedFloor?.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>)) || []) : (selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>)))}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>তলা নির্বাচন</Label><Select value={floorId || "__all"} onValueChange={(v) => { setFloorId(v === "__all" ? "" : v); setRoomId(""); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger><SelectContent><SelectItem value="__all">সকল তলা</SelectItem>{selectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent></Select></div>
+          <div className="space-y-1.5"><Label>রুম নির্বাচন</Label><Select value={roomId || "__all"} onValueChange={(v) => { setRoomId(v === "__all" ? "" : v); setSearched(false); setData(null); }} disabled={!buildingId}><SelectTrigger className="w-full"><SelectValue placeholder={!buildingId ? "আগে বিল্ডিং বেছে নিন" : floorId ? "তলা নির্বাচিত" : "রুম বেছে নিন"} /></SelectTrigger><SelectContent><SelectItem value="__all">সকল রুম</SelectItem>{floorId ? (selectedFloor?.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>)) || []) : (selectedBuilding?.floors?.sort((a, b) => a.floorNumber - b.floorNumber).map((floor) => (<SelectGroup key={floor.id}><SelectLabel className="text-xs font-semibold text-muted-foreground bg-muted/50">{floor.floorNumber} তলা</SelectLabel>{floor.rooms?.map((room) => (<SelectItem key={room.id} value={room.id}><span className="flex items-center gap-2">{room.roomNumber}{room.tenants?.length > 0 && (<span className="size-2 rounded-full bg-emerald-500 inline-block" />)}</span></SelectItem>))}</SelectGroup>)))}</SelectContent></Select></div>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex bg-gray-100 rounded-lg p-0.5">
@@ -3111,7 +3226,7 @@ function OverviewTab() {
               <Package className="size-3.5" />মালামাল
             </button>
           </div>
-          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || !roomId}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-10 px-6" onClick={handleSearch} disabled={searchLoading || (!roomId && !buildingId)}>{searchLoading ? (<div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />) : (<Search className="size-4" />)}সার্চ করুন</Button>
         </div>
       </CardContent></Card>
       {!searched && (<Alert><Search className="size-4" /><AlertDescription>বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন</AlertDescription></Alert>)}
@@ -3124,15 +3239,50 @@ function OverviewTab() {
                 <BedDouble className="size-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-semibold">রুম: {data.roomNumber}</p>
+                <p className="font-semibold">{data.mode === 'allRooms' ? `সকল রুমের তালিকা (${toBanglaNumber(data.rooms?.length || 0)} টি রুম)` : `রুম: ${data.roomNumber}`}</p>
                 <p className="text-xs text-muted-foreground">
                   বিল্ডিং: {selectedBuildingName}
-                  {selectedFloorNumber !== null && ` • তলা: ${toBanglaNumber(selectedFloorNumber)} তলা`}
+                  {data.mode !== 'allRooms' && selectedFloorNumber !== null && ` • তলা: ${toBanglaNumber(selectedFloorNumber)} তলা`}
                 </p>
               </div>
             </div>
           </div>
 
+          {/* All Rooms Mode */}
+          {data.mode === 'allRooms' && data.rooms?.map((roomData: any) => (
+            <Card key={roomData.roomId}>
+              <CardHeader className="py-3 px-4">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center size-7 rounded bg-emerald-100 text-emerald-700"><BedDouble className="size-3.5" /></div>
+                  <div>
+                    <CardTitle className="text-sm">রুম: {roomData.roomNumber}</CardTitle>
+                    <p className="text-[11px] text-muted-foreground">{toBanglaNumber(roomData.floorNumber)} তলা • বর্তমান ভাড়াটে: {toBanglaNumber(roomData.currentTenants?.length || 0)} জন</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="px-4 pb-4 space-y-2">
+                {roomData.currentTenants?.length > 0 ? roomData.currentTenants.map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <div className="w-7 h-7 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">{t.name.charAt(0)}</div>
+                    <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
+                  </div>
+                )) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো ভাড়াটে নেই</p>}
+                {roomData.previousTenants?.length > 0 && (
+                  <div className="mt-1"><span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({roomData.previousTenants.length})</span>
+                    {roomData.previousTenants.slice(0, 3).map((t: any) => (
+                      <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                        <span>{t.name}</span><span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
+                      </div>
+                    ))}
+                    {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Single Room Mode — existing content */}
+          {data.mode !== 'allRooms' && (<>
           {/* ভাড়াটে তালিকা — only when tenants sub-tab selected */}
           {overviewSubTab === "tenants" && (
           <div>
@@ -3200,6 +3350,7 @@ function OverviewTab() {
             {data.currentInventory.length === 0 ? (<p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো মালামাল নেই</p>) : (<div className="bg-white border rounded-lg overflow-hidden divide-y">{data.currentInventory.map((item) => (<div key={item.id} className="flex items-center gap-1.5 px-2 py-1 hover:bg-gray-50/80 group"><span className="text-xs font-medium flex-1 truncate min-w-0">{item.itemName}</span><span className="text-[10px] text-muted-foreground shrink-0">×{item.quantity}</span><span className="shrink-0">{getConditionBadge(item.condition)}</span><div className="flex gap-0 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><Button variant="ghost" size="sm" className="size-5 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => { setEditInvItem({ id: item.id, itemName: item.itemName, quantity: item.quantity, condition: item.condition, note: item.note }); setEditInvOpen(true); }}><Edit3 className="size-2.5" /></Button><AlertDialog><AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="size-5 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"><Trash2 className="size-2.5" /></Button></AlertDialogTrigger><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>মালামাল মুছে ফেলবেন?</AlertDialogTitle><AlertDialogDescription>&quot;{item.itemName}&quot; স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>বাতিল</AlertDialogCancel><AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={() => handleDeleteInventory(item.id)} disabled={deletingInv}>মুছে ফেলুন</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog></div></div>))}</div>)}
           </div>
           )}
+          </>)}
         </div>
       )}
 

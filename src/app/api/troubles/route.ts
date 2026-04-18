@@ -51,7 +51,16 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, status, resolutionNote, resolvedBy, newItems } = body;
+    const { id, status, resolutionNote, resolvedBy, description, reportedBy, newItems } = body;
+
+    // Edit mode: update description and/or reportedBy only
+    if (description !== undefined || reportedBy !== undefined) {
+      const updateData: Record<string, unknown> = {};
+      if (description !== undefined) updateData.description = description;
+      if (reportedBy !== undefined) updateData.reportedBy = reportedBy;
+      const report = await db.troubleReport.update({ where: { id }, data: updateData });
+      return NextResponse.json(report);
+    }
 
     const report = await db.troubleReport.update({
       where: { id },

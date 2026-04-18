@@ -2,11 +2,67 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 // GET room-wise data: current + previous tenants and inventory
-// Query params: roomId (required)
+// Query params: roomId (single room) OR buildingId (all rooms in building)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const roomId = searchParams.get('roomId');
+    const buildingId = searchParams.get('buildingId');
+
+    // Building-wide mode: return all rooms data
+    if (buildingId && !roomId) {
+      const rooms = await db.room.findMany({
+        where: { floor: { buildingId } },
+        include: { floor: { select: { floorNumber: true, buildingId: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const allRoomData = await Promise.all(rooms.map(async (room) => {
+        const allTenants = await db.tenant.findMany({
+          where: { roomId: room.id },
+          orderBy: { createdAt: 'desc' },
+        });
+        const currentTenants = allTenants.filter((t) => t.isActive);
+        const previousTenants = allTenants.filter((t) => !t.isActive);
+
+        const allInventory = await db.inventory.findMany({
+          where: { roomId: room.id },
+          orderBy: { addedDate: 'desc' },
+          include: { tenant: { select: { id: true, name: true } } },
+        });
+
+        let currentInventory = allInventory;
+        let previousInventory: typeof allInventory = [];
+        if (currentTenants.length > 0) {
+          const activeTenantIds = new Set(currentTenants.map((t) => t.id));
+          currentInventory = allInventory.filter((inv) => inv.tenantId && activeTenantIds.has(inv.tenantId));
+          previousInventory = allInventory.filter((inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId));
+        } else if (allTenants.length > 0) {
+          const latestTenant = allTenants[0];
+          currentInventory = allInventory.filter((inv) => inv.tenantId === latestTenant.id);
+          previousInventory = allInventory.filter((inv) => inv.tenantId !== latestTenant.id);
+        }
+        if (allTenants.length === 0) { currentInventory = allInventory; previousInventory = []; }
+
+        const vacateRecords = await db.vacateRecord.findMany({
+          where: { roomId: room.id },
+          orderBy: { vacatedAt: 'desc' },
+        });
+
+        return {
+          roomId: room.id,
+          roomNumber: room.roomNumber,
+          floorNumber: room.floor.floorNumber,
+          currentTenants: currentTenants.map((t) => ({ id: t.id, name: t.name, designation: t.designation, phone: t.phone, startDate: t.startDate })),
+          previousTenants: previousTenants.map((t) => ({ id: t.id, name: t.name, designation: t.designation, phone: t.phone, startDate: t.startDate, endDate: t.endDate })),
+          currentInventory: currentInventory.map((inv) => ({ id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note, addedDate: inv.addedDate, tenantId: inv.tenantId, tenantName: inv.tenant?.name || null })),
+          previousInventory: previousInventory.map((inv) => ({ id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note, addedDate: inv.addedDate, tenantId: inv.tenantId, tenantName: inv.tenant?.name || null })),
+          vacateRecords: vacateRecords.map((vr) => ({ id: vr.id, tenantId: vr.tenantId, tenantName: vr.tenantName, vacatedAt: vr.vacatedAt, inventorySnapshot: vr.inventorySnapshot })),
+        };
+      }));
+
+      return NextResponse.json({ mode: 'allRooms', rooms: allRoomData });
+    }
 
     if (!roomId) {
       return NextResponse.json({ error: 'রুম আইডি দিন' }, { status: 400 });
