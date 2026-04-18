@@ -10,11 +10,32 @@ export async function GET(req: NextRequest) {
     const tenants = await db.tenant.findMany({
       where: roomId ? { roomId } : undefined,
       include: {
-        room: { select: { id: true, roomNumber: true, floorId: true } },
+        room: {
+          select: { id: true, roomNumber: true, floorId: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json(tenants);
+
+    // Attach building name to each tenant
+    const floors = await db.floor.findMany({
+      where: { id: { in: [...new Set(tenants.map(t => t.room.floorId))] } },
+      select: { id: true, buildingId: true },
+    });
+    const buildingIds = [...new Set(floors.map(f => f.buildingId))];
+    const bldgs = await db.building.findMany({
+      where: { id: { in: buildingIds } },
+      select: { id: true, name: true },
+    });
+    const bldgMap = Object.fromEntries(bldgs.map(b => [b.id, b.name]));
+    const floorMap = Object.fromEntries(floors.map(f => [f.id, f.buildingId]));
+
+    const tenantsWithBuilding = tenants.map(t => ({
+      ...t,
+      buildingName: bldgMap[floorMap[t.room.floorId]] || "",
+    }));
+
+    return NextResponse.json(tenantsWithBuilding);
   } catch (error) {
     return NextResponse.json({ error: 'ভাড়াটে লোড করতে সমস্যা হয়েছে' }, { status: 500 });
   }

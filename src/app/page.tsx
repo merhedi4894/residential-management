@@ -109,6 +109,7 @@ interface Tenant {
   isActive: boolean;
   createdAt: string;
   room: { id: string; roomNumber: string; floorId: string };
+  buildingName?: string;
   inventories?: InventoryItem[];
 }
 
@@ -1243,9 +1244,21 @@ function TenantsTab() {
   // Month/Year search filter
   const [filterMonth, setFilterMonth] = useState("");
   const [filterYear, setFilterYear] = useState("");
+  const [filterBuilding, setFilterBuilding] = useState("");
   const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [tenantPage, setTenantPage] = useState(1);
   const TENANT_PAGE_SIZE = 10;
+
+  // Edit tenant dialog
+  const [editTenantOpen, setEditTenantOpen] = useState(false);
+  const [editTenantData, setEditTenantData] = useState<{ id: string; name: string; designation: string; phone: string }>({ id: "", name: "", designation: "", phone: "" });
+  const [savingTenant, setSavingTenant] = useState(false);
+
+  // Delete tenant dialog
+  const [deleteTenantId, setDeleteTenantId] = useState("");
+  const [deleteTenantName, setDeleteTenantName] = useState("");
+  const [deleteTenantOpen, setDeleteTenantOpen] = useState(false);
+  const [deletingTenant, setDeletingTenant] = useState(false);
 
   // Add tenant dialog
   const [addOpen, setAddOpen] = useState(false);
@@ -1518,22 +1531,120 @@ function TenantsTab() {
     setVacateItems((prev) => [...prev, { itemName: "", quantity: 1, condition: "ভালো" }]);
   };
 
-  // Filter tenants by month/year
+  // Filter tenants by building/month/year
   const filteredTenants = React.useMemo(() => {
-    if (!filterMonth && !filterYear) return tenants;
+    if (!filterMonth && !filterYear && !filterBuilding) return tenants;
     return tenants.filter((t) => {
       const d = new Date(t.startDate);
       const mOk = !filterMonth || d.getMonth() + 1 === parseInt(filterMonth);
       const yOk = !filterYear || d.getFullYear() === parseInt(filterYear);
-      return mOk && yOk;
+      const bOk = !filterBuilding || t.buildingName === filterBuilding;
+      return mOk && yOk && bOk;
     });
-  }, [tenants, filterMonth, filterYear]);
+  }, [tenants, filterMonth, filterYear, filterBuilding]);
 
   const totalTenantPages = Math.max(1, Math.ceil(filteredTenants.length / TENANT_PAGE_SIZE));
   const paginatedTenants = filteredTenants.slice((tenantPage - 1) * TENANT_PAGE_SIZE, tenantPage * TENANT_PAGE_SIZE);
 
   // Reset page on filter change
-  useEffect(() => { setTenantPage(1); }, [filterMonth, filterYear]);
+  useEffect(() => { setTenantPage(1); }, [filterMonth, filterYear, filterBuilding]);
+
+  // Edit tenant handlers
+  const openEditTenant = (tenant: Tenant) => {
+    setEditTenantData({ id: tenant.id, name: tenant.name, designation: tenant.designation || "", phone: tenant.phone || "" });
+    setEditTenantOpen(true);
+  };
+
+  const handleSaveTenant = async () => {
+    if (!editTenantData.name.trim()) { toast.error("ভাড়াটের নাম দিন"); return; }
+    setSavingTenant(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editTenantData.id, action: "updateInfo", name: editTenantData.name.trim(), designation: editTenantData.designation.trim() || null, phone: editTenantData.phone.trim() || null }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("ভাড়াটে তথ্য আপডেট হয়েছে");
+      setEditTenantOpen(false);
+      loadData();
+    } catch { toast.error("আপডেট করতে সমস্যা হয়েছে"); }
+    finally { setSavingTenant(false); }
+  };
+
+  const openDeleteTenant = (tenant: Tenant) => {
+    setDeleteTenantId(tenant.id);
+    setDeleteTenantName(tenant.name);
+    setDeleteTenantOpen(true);
+  };
+
+  const handleDeleteTenant = async () => {
+    setDeletingTenant(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteTenantId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("ভাড়াটে মুছে ফেলা হয়েছে");
+      setDeleteTenantOpen(false);
+      loadData();
+      window.dispatchEvent(new Event("dashboard-data-changed"));
+    } catch { toast.error("মুছে ফেলতে সমস্যা হয়েছে"); }
+    finally { setDeletingTenant(false); }
+  };
+
+  // XLSX download
+  const handleDownloadTenants = async () => {
+    if (filteredTenants.length === 0) { toast.error("ডাউনলোড করার মতো কোনো ভাড়াটে নেই"); return; }
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet("ভাড়াটে তালিকা");
+
+      // Green header style
+      const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF22C55E" } };
+      const headerFont = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      const border = { bottom: { style: "thin", color: { argb: "FF000000" } } };
+
+      const headers = ["ক্রম", "বিল্ডিং নাম", "নাম", "পদবী", "রুম নম্বর", "ফোন", "শুরুর তারিখ", "অবস্থা"];
+      const headerRow = sheet.addRow(headers);
+      headerRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; cell.border = border; cell.alignment = { horizontal: "center", vertical: "middle" }; });
+      headerRow.height = 28;
+
+      filteredTenants.forEach((t, idx) => {
+        const row = sheet.addRow([
+          idx + 1,
+          t.buildingName || "-",
+          t.name,
+          t.designation || "-",
+          t.room?.roomNumber || "-",
+          t.phone || "-",
+          t.startDate ? new Date(t.startDate).toLocaleDateString("bn-BD") : "-",
+          t.isActive ? "সক্রিয়" : "অসক্রিয়",
+        ]);
+        row.eachCell((cell, colNumber) => {
+          cell.border = border;
+          cell.alignment = { horizontal: colNumber <= 1 ? "center" : "left", vertical: "middle" };
+        });
+      });
+
+      // Auto column widths
+      sheet.columns.forEach((col) => { col.width = 18; });
+      sheet.getColumn(1).width = 6;
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ভাড়াটে_তালিকা${filterBuilding ? `_${filterBuilding}` : ""}${filterMonth ? `_${BENGALI_MONTHS[parseInt(filterMonth) - 1]?.label}` : ""}${filterYear ? `_${filterYear}` : ""}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("XLSX ডাউনলোড হয়েছে");
+    } catch { toast.error("ডাউনলোড করতে সমস্যা হয়েছে"); }
+  };
 
   if (loading) {
     return (
@@ -2214,6 +2325,13 @@ function TenantsTab() {
         <div className="flex flex-wrap items-center gap-2">
           <Search className="size-4 text-muted-foreground shrink-0" />
           <span className="text-xs font-medium text-muted-foreground">সার্চ:</span>
+          <Select value={filterBuilding || "__all"} onValueChange={(v) => setFilterBuilding(v === "__all" ? "" : v)}>
+            <SelectTrigger className="w-[150px] h-8 text-xs"><SelectValue placeholder="বিল্ডিং বেছে নিন" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">সব বিল্ডিং</SelectItem>
+              {buildings.map((b) => (<SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>))}
+            </SelectContent>
+          </Select>
           <Select value={filterMonth} onValueChange={(v) => setFilterMonth(v === "__all" ? "" : v)}>
             <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue placeholder="মাস বেছে নিন" /></SelectTrigger>
             <SelectContent>
@@ -2228,8 +2346,12 @@ function TenantsTab() {
               {availableYears.map((y) => (<SelectItem key={y} value={String(y)}>{toBanglaNumber(y)}</SelectItem>))}
             </SelectContent>
           </Select>
-          {(filterMonth || filterYear) && (<Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterMonth(""); setFilterYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>)}
-          <span className="text-xs text-muted-foreground ml-auto">মোট: {filteredTenants.length} জন</span>
+          {(filterBuilding || filterMonth || filterYear) && (<Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground" onClick={() => { setFilterBuilding(""); setFilterMonth(""); setFilterYear(""); }}><X className="size-3 mr-1" />মুছুন</Button>)}
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 ml-auto" onClick={handleDownloadTenants}>
+            <Download className="size-3" />
+            XLSX ডাউনলোড
+          </Button>
+          <span className="text-xs text-muted-foreground">মোট: {toBanglaNumber(filteredTenants.length)} জন</span>
         </div>
       </CardContent></Card>
 
@@ -2249,18 +2371,20 @@ function TenantsTab() {
             <TableHeader>
               <TableRow className="bg-emerald-50/50">
                 <TableHead>নাম</TableHead>
+                <TableHead>বিল্ডিং নাম</TableHead>
                 <TableHead>পদবী</TableHead>
                 <TableHead>রুম নম্বর</TableHead>
                 <TableHead>ফোন</TableHead>
                 <TableHead>শুরুর তারিখ</TableHead>
                 <TableHead>অবস্থা</TableHead>
-                <TableHead>অ্যাকশন</TableHead>
+                <TableHead className="text-center">অ্যাকশন</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedTenants.map((tenant) => (
                 <TableRow key={tenant.id}>
                   <TableCell className="font-medium">{tenant.name}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-blue-700 border-blue-300 bg-blue-50">{tenant.buildingName || "-"}</Badge></TableCell>
                   <TableCell>{tenant.designation || "-"}</TableCell>
                   <TableCell>{tenant.room?.roomNumber}</TableCell>
                   <TableCell>{tenant.phone || "-"}</TableCell>
@@ -2275,45 +2399,65 @@ function TenantsTab() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {tenant.isActive && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
-                        disabled={vacateLoading2}
-                        onClick={async () => {
-                          setVacateLoading2(true);
-                          try {
-                            setVacateTenant(tenant);
-                            const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
-                            if (res.ok) {
-                              const items = await res.json();
-                              if (Array.isArray(items) && items.length > 0) {
-                                setVacateItems(items.map((inv: any) => ({
-                                  id: inv.id,
-                                  itemName: inv.itemName,
-                                  quantity: inv.quantity,
-                                  condition: inv.condition,
-                                  note: inv.note,
-                                })));
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => openEditTenant(tenant)} title="এডিট করুন">
+                        <Edit3 className="size-3.5" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => openDeleteTenant(tenant)} title="মুছে ফেলুন">
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>&quot;{deleteTenantName}&quot; কে মুছে ফেলবেন?</AlertDialogTitle>
+                            <AlertDialogDescription>এই ভাড়াটের তথ্য স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>বাতিল</AlertDialogCancel>
+                            <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteTenant} disabled={deletingTenant}>
+                              {deletingTenant ? "মুছে ফেলা হচ্ছে..." : "মুছে ফেলুন"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      {tenant.isActive && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50 text-[11px]"
+                          disabled={vacateLoading2}
+                          onClick={async () => {
+                            setVacateLoading2(true);
+                            try {
+                              setVacateTenant(tenant);
+                              const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
+                              if (res.ok) {
+                                const items = await res.json();
+                                if (Array.isArray(items) && items.length > 0) {
+                                  setVacateItems(items.map((inv: any) => ({
+                                    id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note,
+                                  })));
+                                } else {
+                                  setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                                }
                               } else {
                                 setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
                               }
-                            } else {
+                              setEditingVacateIdx(null);
+                              setVacateOpen(true);
+                            } catch {
                               setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                            } finally {
+                              setVacateLoading2(false);
                             }
-                            setEditingVacateIdx(null);
-                            setVacateOpen(true);
-                          } catch {
-                            setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
-                          } finally {
-                            setVacateLoading2(false);
-                          }
-                        }}
-                      >
-                        রুম ছেড়ে দিন
-                      </Button>
-                    )}
+                          }}
+                        >
+                          রুম ছাড়ুন
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -2328,10 +2472,14 @@ function TenantsTab() {
           <Card key={tenant.id}>
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="font-semibold text-base">{tenant.name}</p>
                   {tenant.designation && <p className="text-xs text-blue-600 mt-0.5">{tenant.designation}</p>}
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                  <p className="text-xs text-purple-600 font-medium mt-1">
+                    <Building2 className="size-3 inline-block -mt-0.5 mr-1" />
+                    {tenant.buildingName || "-"}
+                  </p>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground mt-0.5">
                     <BedDouble className="size-3" />
                     <span>রুম: {tenant.room?.roomNumber}</span>
                   </div>
@@ -2346,53 +2494,73 @@ function TenantsTab() {
                     <span>শুরু: {formatDate(tenant.startDate)}</span>
                   </div>
                 </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" className="size-7 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50" onClick={() => openEditTenant(tenant)}>
+                    <Edit3 className="size-3.5" />
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="size-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => openDeleteTenant(tenant)}>
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>&quot;{deleteTenantName}&quot; কে মুছে ফেলবেন?</AlertDialogTitle>
+                        <AlertDialogDescription>এই ভাড়াটের তথ্য স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>বাতিল</AlertDialogCancel>
+                        <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteTenant} disabled={deletingTenant}>
+                          {deletingTenant ? "মুছে ফেলা হচ্ছে..." : "মুছে ফেলুন"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
                 {tenant.isActive ? (
-                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300">
-                    সক্রিয়
-                  </Badge>
+                  <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300">সক্রিয়</Badge>
                 ) : (
                   <Badge variant="secondary">অসক্রিয়</Badge>
                 )}
-              </div>
-              {tenant.isActive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-3 w-full gap-1 text-orange-600 border-orange-300 hover:bg-orange-50"
-                  disabled={vacateLoading2}
-                  onClick={async () => {
-                    setVacateLoading2(true);
-                    try {
-                      setVacateTenant(tenant);
-                      const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
-                      if (res.ok) {
-                        const items = await res.json();
-                        if (Array.isArray(items) && items.length > 0) {
-                          setVacateItems(items.map((inv: any) => ({
-                            id: inv.id,
-                            itemName: inv.itemName,
-                            quantity: inv.quantity,
-                            condition: inv.condition,
-                            note: inv.note,
-                          })));
+                {tenant.isActive && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-orange-600 border-orange-300 hover:bg-orange-50 text-[11px] flex-1"
+                    disabled={vacateLoading2}
+                    onClick={async () => {
+                      setVacateLoading2(true);
+                      try {
+                        setVacateTenant(tenant);
+                        const res = await fetch(`/api/inventory?tenantId=${tenant.id}`);
+                        if (res.ok) {
+                          const items = await res.json();
+                          if (Array.isArray(items) && items.length > 0) {
+                            setVacateItems(items.map((inv: any) => ({
+                              id: inv.id, itemName: inv.itemName, quantity: inv.quantity, condition: inv.condition, note: inv.note,
+                            })));
+                          } else {
+                            setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                          }
                         } else {
                           setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
                         }
-                      } else {
+                        setEditingVacateIdx(null);
+                        setVacateOpen(true);
+                      } catch {
                         setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
+                      } finally {
+                        setVacateLoading2(false);
                       }
-                      setEditingVacateIdx(null);
-                      setVacateOpen(true);
-                    } catch {
-                      setVacateItems([{ itemName: "", quantity: 1, condition: "ভালো" }]);
-                    } finally {
-                      setVacateLoading2(false);
-                    }
-                  }}
-                >
-                  রুম ছেড়ে দিন
-                </Button>
-              )}
+                    }}
+                  >
+                    রুম ছাড়ুন
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -2408,6 +2576,41 @@ function TenantsTab() {
           <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={tenantPage >= totalTenantPages} onClick={() => setTenantPage(tenantPage + 1)}>পরে</Button>
         </div>
       )}
+
+      {/* Edit Tenant Dialog */}
+      <Dialog open={editTenantOpen} onOpenChange={setEditTenantOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-blue-600">
+              <Edit3 className="size-5" />
+              ভাড়াটে তথ্য এডিট করুন
+            </DialogTitle>
+            <DialogDescription>
+              ভাড়াটের নাম, পদবী বা ফোন নম্বর পরিবর্তন করুন
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="editTName">নাম</Label>
+              <Input id="editTName" value={editTenantData.name} onChange={(e) => setEditTenantData(prev => ({ ...prev, name: e.target.value }))} onKeyDown={(e) => { if (e.key === "Enter") handleSaveTenant(); }} autoFocus />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editTDesig">পদবী</Label>
+              <Input id="editTDesig" value={editTenantData.designation} onChange={(e) => setEditTenantData(prev => ({ ...prev, designation: e.target.value }))} placeholder="পদবী" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editTPhone">ফোন নম্বর</Label>
+              <Input id="editTPhone" value={editTenantData.phone} onChange={(e) => setEditTenantData(prev => ({ ...prev, phone: e.target.value }))} placeholder="ফোন নম্বর" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTenantOpen(false)}>বাতিল</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveTenant} disabled={savingTenant || !editTenantData.name.trim()}>
+              {savingTenant ? "সেভ হচ্ছে..." : "সেভ করুন"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Vacate Dialog */}
       <Dialog open={vacateOpen} onOpenChange={setVacateOpen}>
