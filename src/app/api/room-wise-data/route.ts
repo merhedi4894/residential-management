@@ -12,8 +12,7 @@ export async function GET(req: NextRequest) {
 
     // ── Building-wide mode ────────────────────────────────────────────
     if (buildingId && !roomId) {
-      // Use the SAME include pattern as /api/buildings (proven to work)
-      // Fetch building with nested floors, rooms, tenants
+      // Step 1: Fetch building with nested floors, rooms, tenants in ONE query
       const building = await db.building.findUnique({
         where: { id: buildingId },
         include: {
@@ -31,45 +30,82 @@ export async function GET(req: NextRequest) {
       });
 
       if (!building || !building.floors || building.floors.length === 0) {
-        console.log(`[room-wise-data] No building/floors found for buildingId=${buildingId}`);
         return NextResponse.json({ mode: 'allRooms', rooms: [] });
       }
 
+      // Step 2: Collect ALL room IDs in ONE pass
+      const allRoomIds: string[] = [];
+      for (const floor of building.floors) {
+        if (floorId && floor.id !== floorId) continue;
+        if (floor.rooms) {
+          for (const room of floor.rooms) {
+            allRoomIds.push(room.id);
+          }
+        }
+      }
+
+      if (allRoomIds.length === 0) {
+        return NextResponse.json({ mode: 'allRooms', rooms: [] });
+      }
+
+      // Step 3: Fetch ALL inventory for ALL rooms in ONE query (instead of N queries)
+      const allInventory = await db.inventory.findMany({
+        where: { roomId: { in: allRoomIds } },
+        orderBy: { addedDate: 'desc' },
+        include: { tenant: { select: { id: true, name: true } } },
+      });
+
+      // Step 4: Fetch ALL vacate records for ALL rooms in ONE query (instead of N queries)
+      const allVacateRecords = await db.vacateRecord.findMany({
+        where: { roomId: { in: allRoomIds } },
+        orderBy: { vacatedAt: 'desc' },
+      });
+
+      // Step 5: Group inventory and vacate records by roomId in memory
+      const inventoryByRoom = new Map<string, typeof allInventory>();
+      for (const inv of allInventory) {
+        const list = inventoryByRoom.get(inv.roomId) || [];
+        list.push(inv);
+        inventoryByRoom.set(inv.roomId, list);
+      }
+
+      const vacateByRoom = new Map<string, typeof allVacateRecords>();
+      for (const vr of allVacateRecords) {
+        const list = vacateByRoom.get(vr.roomId) || [];
+        list.push(vr);
+        vacateByRoom.set(vr.roomId, list);
+      }
+
+      // Step 6: Build response with in-memory grouping (no more DB queries)
       const allRoomData = [];
 
       for (const floor of building.floors) {
-        // Skip floors if a specific floor was requested
         if (floorId && floor.id !== floorId) continue;
-
         if (!floor.rooms) continue;
+
         for (const room of floor.rooms) {
           const allTenants = room.tenants || [];
           const currentTenants = allTenants.filter((t) => t.isActive);
           const previousTenants = allTenants.filter((t) => !t.isActive);
 
-          const allInventory = await db.inventory.findMany({
-            where: { roomId: room.id },
-            orderBy: { addedDate: 'desc' },
-            include: { tenant: { select: { id: true, name: true } } },
-          });
+          // Get inventory for this room from the pre-fetched map
+          const roomInventory = inventoryByRoom.get(room.id) || [];
 
-          let currentInventory = allInventory;
-          let previousInventory: typeof allInventory = [];
+          let currentInventory = roomInventory;
+          let previousInventory: typeof roomInventory = [];
           if (currentTenants.length > 0) {
             const activeTenantIds = new Set(currentTenants.map((t) => t.id));
-            currentInventory = allInventory.filter((inv) => inv.tenantId && activeTenantIds.has(inv.tenantId));
-            previousInventory = allInventory.filter((inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId));
+            currentInventory = roomInventory.filter((inv) => inv.tenantId && activeTenantIds.has(inv.tenantId));
+            previousInventory = roomInventory.filter((inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId));
           } else if (allTenants.length > 0) {
             const latestTenant = allTenants[0];
-            currentInventory = allInventory.filter((inv) => inv.tenantId === latestTenant.id);
-            previousInventory = allInventory.filter((inv) => inv.tenantId !== latestTenant.id);
+            currentInventory = roomInventory.filter((inv) => inv.tenantId === latestTenant.id);
+            previousInventory = roomInventory.filter((inv) => inv.tenantId !== latestTenant.id);
           }
-          if (allTenants.length === 0) { currentInventory = allInventory; previousInventory = []; }
+          if (allTenants.length === 0) { currentInventory = roomInventory; previousInventory = []; }
 
-          const vacateRecords = await db.vacateRecord.findMany({
-            where: { roomId: room.id },
-            orderBy: { vacatedAt: 'desc' },
-          });
+          // Get vacate records for this room from the pre-fetched map
+          const vacateRecords = vacateByRoom.get(room.id) || [];
 
           allRoomData.push({
             roomId: room.id,
@@ -84,7 +120,6 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      console.log(`[room-wise-data] buildingId=${buildingId}, floorId=${floorId || 'all'}, rooms=${allRoomData.length}`);
       return NextResponse.json({ mode: 'allRooms', rooms: allRoomData });
     }
 

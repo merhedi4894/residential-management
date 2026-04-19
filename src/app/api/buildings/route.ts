@@ -42,17 +42,20 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Auto-create floors
-    const floors = [];
-    for (let i = 1; i <= parseInt(totalFloors); i++) {
-      const floor = await db.floor.create({
-        data: {
-          floorNumber: i,
-          buildingId: building.id,
-        },
-      });
-      floors.push(floor);
-    }
+    // Auto-create floors in ONE batch operation
+    const floorCount = parseInt(totalFloors);
+    await db.floor.createMany({
+      data: Array.from({ length: floorCount }, (_, i) => ({
+        floorNumber: i + 1,
+        buildingId: building.id,
+      })),
+    });
+
+    // Fetch created floors for response
+    const floors = await db.floor.findMany({
+      where: { buildingId: building.id },
+      orderBy: { floorNumber: 'asc' },
+    });
 
     return NextResponse.json({ ...building, floors });
   } catch (error) {

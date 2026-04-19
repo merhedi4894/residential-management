@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureTablesExist } from '@/lib/db-init';
 
-// POST - Assign belonging templates to all rooms in a building
+// POST - Assign belonging templates to all rooms in a building (optimized batch)
 export async function POST(req: NextRequest) {
   try {
     await ensureTablesExist();
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'এই বিল্ডিংয়ে কোনো মালামাল টেমপ্লেট নেই' }, { status: 400 });
     }
 
-    // Get all rooms in this building
+    // Get all rooms in this building (ONE query instead of per-floor)
     const floors = await db.floor.findMany({
       where: { buildingId },
       include: { rooms: true },
@@ -32,39 +32,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'এই বিল্ডিংয়ে কোনো রুম নেই' }, { status: 400 });
     }
 
-    let assignedCount = 0;
+    // Batch check: Fetch ALL existing inventory items for ALL rooms in ONE query
+    const roomIds = allRooms.map((r) => r.id);
+    const templateNames = templates.map((t) => t.itemName);
 
-    // For each room, create inventory items from templates
+    const existingItems = await db.inventory.findMany({
+      where: {
+        roomId: { in: roomIds },
+        itemName: { in: templateNames },
+        tenantId: null,
+      },
+      select: { id: true, roomId: true, itemName: true },
+    });
+
+    // Build a Set of "roomId-itemName" for fast lookup
+    const existingKeys = new Set(existingItems.map((i) => `${i.roomId}::${i.itemName}`));
+
+    // Prepare all items to create in one batch
+    const itemsToCreate: { itemName: string; quantity: number; condition: string; roomNumber: string; roomId: string; tenantId: null }[] = [];
+
     for (const room of allRooms) {
       for (const template of templates) {
-        // Check if this item already exists for this room (without tenant)
-        const existing = await db.inventory.findFirst({
-          where: {
-            roomId: room.id,
+        const key = `${room.id}::${template.itemName}`;
+        if (!existingKeys.has(key)) {
+          itemsToCreate.push({
             itemName: template.itemName,
+            quantity: template.quantity,
+            condition: 'ভালো',
+            roomNumber: room.roomNumber,
+            roomId: room.id,
             tenantId: null,
-          },
-        });
-
-        if (!existing) {
-          await db.inventory.create({
-            data: {
-              itemName: template.itemName,
-              quantity: template.quantity,
-              condition: 'ভালো',
-              roomNumber: room.roomNumber,
-              roomId: room.id,
-              tenantId: null,
-            },
           });
-          assignedCount++;
         }
+      }
+    }
+
+    // Create all items in ONE batch operation
+    if (itemsToCreate.length > 0) {
+      // createMany has a limit in some DBs, so batch by 100
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < itemsToCreate.length; i += BATCH_SIZE) {
+        const batch = itemsToCreate.slice(i, i + BATCH_SIZE);
+        await db.inventory.createMany({ data: batch });
       }
     }
 
     return NextResponse.json({
       success: true,
-      assignedCount,
+      assignedCount: itemsToCreate.length,
       roomCount: allRooms.length,
       itemCount: templates.length,
     });

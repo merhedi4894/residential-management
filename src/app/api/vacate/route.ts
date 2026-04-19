@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// POST - Vacate tenant with inventory editing
+// POST - Vacate tenant with inventory editing (optimized with batch operations)
 // Body: { tenantId, inventoryItems: [{ id, itemName, quantity, condition, _delete? }] }
 export async function POST(req: NextRequest) {
   try {
@@ -33,72 +33,72 @@ export async function POST(req: NextRequest) {
     const processedItems: { itemName: string; quantity: number; condition: string; note?: string | null }[] = [];
 
     if (inventoryItems && Array.isArray(inventoryItems)) {
+      // Separate items into categories for batch processing
+      const toDelete: string[] = [];
+      const toUpdate: { id: string; itemName: string; quantity: number; condition: string; note?: string | null }[] = [];
+      const toCreate: { itemName: string; quantity: number; condition: string; roomNumber: string; tenantId: string; roomId: string; note?: string | null }[] = [];
+
       for (const item of inventoryItems) {
-        if (item._delete) {
-          // Delete inventory item
-          try {
-            await db.inventory.delete({ where: { id: item.id } });
-          } catch {
-            // Item might already be deleted, ignore
-          }
+        if (item._delete && item.id) {
+          toDelete.push(item.id);
         } else if (item.id) {
-          // Update existing inventory item
-          try {
-            await db.inventory.update({
+          toUpdate.push({
+            id: item.id,
+            itemName: item.itemName,
+            quantity: parseInt(String(item.quantity)) || 1,
+            condition: item.condition || 'ভালো',
+            note: item.note || null,
+          });
+        } else if (item.itemName?.trim()) {
+          toCreate.push({
+            itemName: item.itemName.trim(),
+            quantity: parseInt(String(item.quantity)) || 1,
+            condition: item.condition || 'ভালো',
+            roomNumber: tenant.room.roomNumber,
+            tenantId: tenant.id,
+            roomId: tenant.roomId,
+            note: item.note || null,
+          });
+        }
+      }
+
+      // Batch delete (ONE query instead of N)
+      if (toDelete.length > 0) {
+        try {
+          await db.inventory.deleteMany({
+            where: { id: { in: toDelete } },
+          });
+        } catch {
+          // Some items might not exist, ignore
+        }
+      }
+
+      // Process updates - batch in parallel where possible
+      // Note: Prisma doesn't support updateMany with different data per record,
+      // but we can use transactions to speed up
+      if (toUpdate.length > 0) {
+        await db.$transaction(
+          toUpdate.map((item) =>
+            db.inventory.update({
               where: { id: item.id },
               data: {
                 itemName: item.itemName,
-                quantity: parseInt(String(item.quantity)) || 1,
-                condition: item.condition || 'ভালো',
-                note: item.note || null,
+                quantity: item.quantity,
+                condition: item.condition,
+                note: item.note,
               },
-            });
-            processedItems.push({
-              itemName: item.itemName,
-              quantity: parseInt(String(item.quantity)) || 1,
-              condition: item.condition || 'ভালো',
-              note: item.note || null,
-            });
-          } catch {
-            // Item might not exist, create it instead
-            const newInv = await db.inventory.create({
-              data: {
-                itemName: item.itemName,
-                quantity: parseInt(String(item.quantity)) || 1,
-                condition: item.condition || 'ভালো',
-                roomNumber: tenant.room.roomNumber,
-                tenantId: tenant.id,
-                roomId: tenant.roomId,
-                note: item.note || null,
-              },
-            });
-            processedItems.push({
-              itemName: newInv.itemName,
-              quantity: newInv.quantity,
-              condition: newInv.condition,
-              note: newInv.note,
-            });
-          }
-        } else if (item.itemName?.trim()) {
-          // New item (no id)
-          const newInv = await db.inventory.create({
-            data: {
-              itemName: item.itemName.trim(),
-              quantity: parseInt(String(item.quantity)) || 1,
-              condition: item.condition || 'ভালো',
-              roomNumber: tenant.room.roomNumber,
-              tenantId: tenant.id,
-              roomId: tenant.roomId,
-              note: item.note || null,
-            },
-          });
-          processedItems.push({
-            itemName: newInv.itemName,
-            quantity: newInv.quantity,
-            condition: newInv.condition,
-            note: newInv.note,
-          });
-        }
+            })
+          )
+        );
+        processedItems.push(...toUpdate);
+      }
+
+      // Batch create (ONE query instead of N)
+      if (toCreate.length > 0) {
+        const newItems = await db.inventory.createMany({
+          data: toCreate,
+        });
+        processedItems.push(...toCreate);
       }
     } else {
       // No inventory items provided, get existing ones

@@ -1673,8 +1673,9 @@ function TenantsTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
         <div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+        <p className="text-sm text-muted-foreground">তথ্য লোড হচ্ছে...</p>
       </div>
     );
   }
@@ -2935,7 +2936,7 @@ function TroublesTab() {
     } catch { toast.error("ডাউনলোড করতে সমস্যা হয়েছে"); }
   };
 
-  if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /></div>);
+  if (loading) return (<div className="flex flex-col items-center justify-center py-20 gap-3"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /><p className="text-sm text-muted-foreground">তথ্য লোড হচ্ছে...</p></div>);
 
   const Pagination = ({ page, totalPages, onPageChange }: { page: number; totalPages: number; onPageChange: (p: number) => void }) => {
     if (totalPages <= 1) return null;
@@ -3272,7 +3273,9 @@ function OverviewTab() {
       </CardContent></Card>
       {!searched && (<Alert><Search className="size-4" /><AlertDescription>বিল্ডিং ও রুম নির্বাচন করে সার্চ করুন</AlertDescription></Alert>)}
 
-      {searched && data && (
+      {searchLoading && (<div className="flex flex-col items-center justify-center py-16 gap-3"><div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /><p className="text-sm text-muted-foreground">তথ্য লোড হচ্ছে...</p></div>)}
+
+      {searched && !searchLoading && data && (
         <div className="space-y-6">
           <div className="bg-white rounded-lg border px-4 py-3">
             <div className="flex items-center gap-3">
@@ -3603,7 +3606,7 @@ function GuestsTab() {
     { value: "10", label: "অক্টোবর" }, { value: "11", label: "নভেম্বর" }, { value: "12", label: "ডিসেম্বর" },
   ];
 
-  if (loading) return (<div className="flex items-center justify-center py-20"><div className="size-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>);
+  if (loading) return (<div className="flex flex-col items-center justify-center py-20 gap-3"><div className="size-8 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin" /><p className="text-sm text-muted-foreground">তথ্য লোড হচ্ছে...</p></div>);
 
   return (
     <div className="space-y-4">
@@ -3996,8 +3999,9 @@ function BelongingsTab() {
           <Card>
             <CardContent className="pt-6">
               {loading ? (
-                <div className="flex items-center justify-center py-8">
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
                   <div className="size-6 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                  <p className="text-xs text-muted-foreground">লোড হচ্ছে...</p>
                 </div>
               ) : templates.length === 0 ? (
                 <div className="text-center py-8">
