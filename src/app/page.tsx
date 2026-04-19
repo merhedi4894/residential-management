@@ -3323,14 +3323,14 @@ function OverviewTab() {
                     {roomData.currentTenants?.length > 0 ? roomData.currentTenants.map((t: any) => (
                       <div key={t.id} className="flex items-center gap-3 bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2">
                         <div className="w-7 h-7 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs font-bold shrink-0">{t.name.charAt(0)}</div>
-                        <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
+                        <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.designation && <span className="text-muted-foreground ml-1.5">({t.designation})</span>}{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
                       </div>
                     )) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো ভাড়াটে নেই</p>}
                     {roomData.previousTenants?.length > 0 && (
                       <div className="mt-1"><span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({roomData.previousTenants.length})</span>
                         {roomData.previousTenants.slice(0, 3).map((t: any) => (
                           <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                            <span>{t.name}</span><span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
+                            <span>{t.name}</span>{t.designation && <><span>•</span><span>{t.designation}</span></>}<span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
                           </div>
                         ))}
                         {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
@@ -3404,8 +3404,9 @@ function OverviewTab() {
                   <div key={tenant.id} className="bg-emerald-50/50 border border-emerald-200 rounded-lg px-3 py-2.5">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-sm font-bold shrink-0">{tenant.name.charAt(0)}</div>
-                      <div className="flex-1 min-w-0 grid grid-cols-3 gap-2 text-sm">
+                      <div className="flex-1 min-w-0 grid grid-cols-4 gap-2 text-sm">
                         <div><span className="text-muted-foreground text-xs">নাম</span><p className="font-medium truncate">{tenant.name}</p></div>
+                        <div><span className="text-muted-foreground text-xs">পদবী</span><p className="font-medium truncate">{tenant.designation || "-"}</p></div>
                         <div><span className="text-muted-foreground text-xs">ফোন</span><p className="font-medium truncate">{tenant.phone || "-"}</p></div>
                         <div><span className="text-muted-foreground text-xs">শুরু</span><p className="font-medium text-xs">{formatDate(tenant.startDate)}</p></div>
                       </div>
