@@ -29,6 +29,7 @@ import {
   UserCheck,
   Download,
   Shield,
+  Layers,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -237,6 +238,11 @@ function getStatusBadge(status: string) {
 }
 
 const uid = () => Math.random().toString(36).substring(2, 9);
+
+function statGridBorder(position: 'left' | 'right', borderColor: string) {
+  if (position === 'left') return `border-l ${borderColor}`;
+  return `border-r ${borderColor}`;
+}
 
 // Bengali months for search filters (shared between TenantsTab and TroublesTab)
 const BENGALI_MONTHS = [
@@ -1038,46 +1044,50 @@ function BuildingsTab() {
         </Alert>
       )}
 
-      {buildings.map((building) => (
+      {buildings.map((building, bIdx) => {
+        const totalRooms = building.floors?.reduce((sum, f) => sum + (f.rooms?.length || 0), 0) || 0;
+        const totalEmptySeats = building.floors?.reduce((totalEmpty, f) => {
+          const cap = building.capacityPerRoom || 1;
+          return totalEmpty + (f.rooms || []).reduce((empty, r) => {
+            const active = (r.tenants?.length || 0);
+            return empty + Math.max(0, cap - active);
+          }, 0);
+        }, 0) || 0;
+        const totalTenants = building.floors?.reduce((total, f) => total + (f.rooms || []).reduce((t, r) => t + (r.tenants?.length || 0), 0), 0) || 0;
+        const colorSchemes = [
+          { bg: 'from-emerald-500 to-emerald-600', lightBg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-500', statBg: 'bg-emerald-100/60', statBorder: 'border-emerald-200' },
+          { bg: 'from-blue-500 to-blue-600', lightBg: 'bg-blue-50', iconBg: 'bg-blue-100', iconColor: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-500', statBg: 'bg-blue-100/60', statBorder: 'border-blue-200' },
+          { bg: 'from-violet-500 to-violet-600', lightBg: 'bg-violet-50', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', border: 'border-violet-200', badge: 'bg-violet-500', statBg: 'bg-violet-100/60', statBorder: 'border-violet-200' },
+          { bg: 'from-amber-500 to-amber-600', lightBg: 'bg-amber-50', iconBg: 'bg-amber-100', iconColor: 'text-amber-700', border: 'border-amber-200', badge: 'bg-amber-500', statBg: 'bg-amber-100/60', statBorder: 'border-amber-200' },
+          { bg: 'from-rose-500 to-rose-600', lightBg: 'bg-rose-50', iconBg: 'bg-rose-100', iconColor: 'text-rose-700', border: 'border-rose-200', badge: 'bg-rose-500', statBg: 'bg-rose-100/60', statBorder: 'border-rose-200' },
+          { bg: 'from-teal-500 to-teal-600', lightBg: 'bg-teal-50', iconBg: 'bg-teal-100', iconColor: 'text-teal-700', border: 'border-teal-200', badge: 'bg-teal-500', statBg: 'bg-teal-100/60', statBorder: 'border-teal-200' },
+        ];
+        const colors = colorSchemes[bIdx % colorSchemes.length];
+        return (
         <Collapsible
           key={building.id}
           open={expandedBuildings.has(building.id)}
           onOpenChange={() => toggleBuilding(building.id)}
         >
-          <Card className="overflow-hidden">
+          <Card className={`overflow-hidden border ${colors.border} shadow-sm`}>
             <CollapsibleTrigger className="w-full" asChild>
               <div>
-              <CardHeader className="hover:bg-emerald-50/50 transition-colors cursor-pointer py-4">
+              {/* Colored Header */}
+              <div className={`bg-gradient-to-r ${colors.bg} px-5 py-5 text-white`}>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center size-10 rounded-lg bg-emerald-100 text-emerald-700">
-                      <Building2 className="size-5" />
+                  <div className="flex items-center gap-3.5">
+                    <div className="flex items-center justify-center size-12 rounded-xl bg-white/20 backdrop-blur-sm">
+                      <Building2 className="size-6" />
                     </div>
                     <div className="text-left">
-                      <CardTitle className="text-lg">{building.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        মোট তলা: {building.totalFloors} • রুম:{" "}
-                        {building.floors?.reduce(
-                          (sum, f) => sum + (f.rooms?.length || 0),
-                          0
-                        )}{" "}
-                        • মোট খালি সিট - {toBanglaNumber(
-                          building.floors?.reduce((totalEmpty, f) => {
-                            const cap = building.capacityPerRoom || 1;
-                            return totalEmpty + (f.rooms || []).reduce((empty, r) => {
-                              const active = (r.tenants?.length || 0);
-                                      return empty + Math.max(0, cap - active);
-                                    }, 0);
-                                  }, 0) || 0
-                        )} টি
-                      </p>
+                      <CardTitle className="text-xl font-bold text-white">{building.name}</CardTitle>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                      className="text-white/80 hover:text-white hover:bg-white/20"
                       onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name, building.capacityPerRoom); }}
                     >
                       <Edit3 className="size-4" />
@@ -1085,19 +1095,43 @@ function BuildingsTab() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      className="text-white/80 hover:text-white hover:bg-white/20"
                       onClick={(e) => { e.stopPropagation(); openDeleteDialog(building.id, building.name); }}
                     >
                       <Trash2 className="size-4" />
                     </Button>
                     {expandedBuildings.has(building.id) ? (
-                      <ChevronDown className="size-5 text-muted-foreground" />
+                      <ChevronDown className="size-5 text-white/80" />
                     ) : (
-                      <ChevronRight className="size-5 text-muted-foreground" />
+                      <ChevronRight className="size-5 text-white/80" />
                     )}
                   </div>
                 </div>
-              </CardHeader>
+              </div>
+              {/* Stats Row */}
+              <div className={`grid grid-cols-3 gap-0 ${colors.lightBg} px-5 py-3.5 border-b`}>
+                <div className={`flex flex-col items-center py-2 ${statGridBorder('left', colors.statBorder)}`}>
+                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
+                    <Layers className="size-4" />
+                  </span>
+                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(building.totalFloors)}</span>
+                  <span className="text-[11px] text-muted-foreground">তলা</span>
+                </div>
+                <div className={`flex flex-col items-center py-2 border-x ${colors.statBorder}`}>
+                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
+                    <BedDouble className="size-4" />
+                  </span>
+                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(totalRooms)}</span>
+                  <span className="text-[11px] text-muted-foreground">রুম</span>
+                </div>
+                <div className={`flex flex-col items-center py-2 ${statGridBorder('right', colors.statBorder)}`}>
+                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
+                    <Users className="size-4" />
+                  </span>
+                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(totalEmptySeats)}</span>
+                  <span className="text-[11px] text-muted-foreground">খালি সিট</span>
+                </div>
+              </div>
               </div>
             </CollapsibleTrigger>
 
@@ -1254,7 +1288,8 @@ function BuildingsTab() {
             </CollapsibleContent>
           </Card>
         </Collapsible>
-      ))}
+        );
+      })}
     </div>
   );
 }
