@@ -562,7 +562,7 @@ function MainTabs() {
           <span className="hidden sm:inline">কমন মালামাল</span>
           <span className="sm:hidden">মালামাল</span>
         </TabsTrigger>
-        <a href="https://store-room-inventory.vercel.app/" className="flex-1 sm:flex-auto flex items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium text-muted-foreground whitespace-nowrap transition-[color,box-shadow] hover:text-foreground min-w-0">
+        <a href="https://store-room-inventory.vercel.app/" className="flex-1 sm:flex-auto flex items-center justify-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm font-medium text-foreground whitespace-nowrap transition-[color,box-shadow] min-w-0">
           <span className="hidden sm:inline">স্টোর রুম</span>
           <span className="sm:hidden">স্টোর</span>
         </a>
