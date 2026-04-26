@@ -155,7 +155,8 @@ export default function LoginPage() {
         return;
       }
       if (!res.ok) {
-        toast.error(data.error || "সেটআপ ব্যর্থ হয়েছে");
+        const debugMsg = data.debug ? ` (${data.debug})` : '';
+        toast.error(data.error + debugMsg || "সেটআপ ব্যর্থ হয়েছে");
         return;
       }
       toast.success("এডমিন অ্যাকাউন্ট তৈরি হয়েছে! এখন লগইন করুন");
