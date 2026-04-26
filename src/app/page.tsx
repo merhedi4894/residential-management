@@ -29,6 +29,7 @@ import {
   UserCheck,
   Download,
   Shield,
+  ExternalLink,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -488,6 +489,13 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
               {counts.tenantCount}
             </span>
           </div>
+          {/* Store button */}
+          <a href="https://store-room-inventory.vercel.app/" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm" className="gap-1.5 h-9 px-3 text-emerald-600 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700">
+              <ExternalLink className="size-3.5" />
+              <span className="hidden sm:inline">Store</span>
+            </Button>
+          </a>
           {/* User menu */}
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
