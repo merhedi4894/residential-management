@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 
 let _client: Client | null = null;
 let _tablesVerified = false;
+let _tablesCheckAttempted = false;
 
 function getLibsqlClient(): Client | null {
   const url = process.env.DATABASE_URL || '';
@@ -41,7 +42,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "sessionToken" TEXT,
         "isSetup" BOOLEAN NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
 
@@ -52,7 +53,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "totalFloors" INTEGER NOT NULL,
         "capacityPerRoom" INTEGER NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
 
       // Floor table
@@ -61,7 +62,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "floorNumber" INTEGER NOT NULL,
         "buildingId" TEXT NOT NULL,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE
       )`,
 
@@ -71,7 +72,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "roomNumber" TEXT NOT NULL,
         "floorId" TEXT NOT NULL,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("floorId") REFERENCES "Floor"("id") ON DELETE CASCADE
       )`,
 
@@ -86,7 +87,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "endDate" DATETIME,
         "isActive" BOOLEAN NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
 
@@ -102,7 +103,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "addedDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "note" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE,
         FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE SET NULL
       )`,
@@ -120,7 +121,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "resolutionNote" TEXT,
         "resolvedBy" TEXT,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
 
@@ -151,7 +152,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "note" TEXT,
         "isPaid" BOOLEAN NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
 
       // BelongingTemplate table
@@ -161,7 +162,7 @@ export async function ensureTablesExist(): Promise<boolean> {
         "itemName" TEXT NOT NULL,
         "quantity" INTEGER NOT NULL DEFAULT 1,
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL,
+        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE
       )`,
     ];
@@ -254,9 +255,12 @@ export async function ensureTablesExist(): Promise<boolean> {
 
     console.log('[db-init] Table check/creation completed');
     _tablesVerified = true;
+    _tablesCheckAttempted = true;
     return true;
   } catch (err: any) {
     console.error('[db-init] Failed to create tables:', err?.message || err);
+    _tablesCheckAttempted = true;
+    // Don't set _tablesVerified so it will retry next time
     return false;
   }
 }
