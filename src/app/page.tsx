@@ -76,11 +76,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -239,10 +234,6 @@ function getStatusBadge(status: string) {
 
 const uid = () => Math.random().toString(36).substring(2, 9);
 
-function statGridBorder(position: 'left' | 'right', borderColor: string) {
-  if (position === 'left') return `border-l ${borderColor}`;
-  return `border-r ${borderColor}`;
-}
 
 // Bengali months for search filters (shared between TenantsTab and TroublesTab)
 const BENGALI_MONTHS = [
@@ -1044,252 +1035,257 @@ function BuildingsTab() {
         </Alert>
       )}
 
-      {buildings.map((building, bIdx) => {
-        const totalRooms = building.floors?.reduce((sum, f) => sum + (f.rooms?.length || 0), 0) || 0;
-        const totalEmptySeats = building.floors?.reduce((totalEmpty, f) => {
-          const cap = building.capacityPerRoom || 1;
-          return totalEmpty + (f.rooms || []).reduce((empty, r) => {
-            const active = (r.tenants?.length || 0);
-            return empty + Math.max(0, cap - active);
-          }, 0);
-        }, 0) || 0;
-        const totalTenants = building.floors?.reduce((total, f) => total + (f.rooms || []).reduce((t, r) => t + (r.tenants?.length || 0), 0), 0) || 0;
-        const colorSchemes = [
-          { bg: 'from-emerald-500 to-emerald-600', lightBg: 'bg-emerald-50', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-500', statBg: 'bg-emerald-100/60', statBorder: 'border-emerald-200' },
-          { bg: 'from-blue-500 to-blue-600', lightBg: 'bg-blue-50', iconBg: 'bg-blue-100', iconColor: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-500', statBg: 'bg-blue-100/60', statBorder: 'border-blue-200' },
-          { bg: 'from-violet-500 to-violet-600', lightBg: 'bg-violet-50', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', border: 'border-violet-200', badge: 'bg-violet-500', statBg: 'bg-violet-100/60', statBorder: 'border-violet-200' },
-          { bg: 'from-amber-500 to-amber-600', lightBg: 'bg-amber-50', iconBg: 'bg-amber-100', iconColor: 'text-amber-700', border: 'border-amber-200', badge: 'bg-amber-500', statBg: 'bg-amber-100/60', statBorder: 'border-amber-200' },
-          { bg: 'from-rose-500 to-rose-600', lightBg: 'bg-rose-50', iconBg: 'bg-rose-100', iconColor: 'text-rose-700', border: 'border-rose-200', badge: 'bg-rose-500', statBg: 'bg-rose-100/60', statBorder: 'border-rose-200' },
-          { bg: 'from-teal-500 to-teal-600', lightBg: 'bg-teal-50', iconBg: 'bg-teal-100', iconColor: 'text-teal-700', border: 'border-teal-200', badge: 'bg-teal-500', statBg: 'bg-teal-100/60', statBorder: 'border-teal-200' },
-        ];
-        const colors = colorSchemes[bIdx % colorSchemes.length];
-        return (
-        <Collapsible
-          key={building.id}
-          open={expandedBuildings.has(building.id)}
-          onOpenChange={() => toggleBuilding(building.id)}
-        >
-          <Card className={`overflow-hidden border ${colors.border} shadow-sm`}>
-            <CollapsibleTrigger className="w-full" asChild>
-              <div>
-              {/* Colored Header */}
-              <div className={`bg-gradient-to-r ${colors.bg} px-5 py-5 text-white`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="flex items-center justify-center size-12 rounded-xl bg-white/20 backdrop-blur-sm">
-                      <Building2 className="size-6" />
-                    </div>
-                    <div className="text-left">
-                      <CardTitle className="text-xl font-bold text-white">{building.name}</CardTitle>
-                    </div>
+      {/* Building Square Color Boxes Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+        {buildings.map((building, bIdx) => {
+          const totalRooms = building.floors?.reduce((sum, f) => sum + (f.rooms?.length || 0), 0) || 0;
+          const totalEmptySeats = building.floors?.reduce((totalEmpty, f) => {
+            const cap = building.capacityPerRoom || 1;
+            return totalEmpty + (f.rooms || []).reduce((empty, r) => {
+              const active = (r.tenants?.length || 0);
+              return empty + Math.max(0, cap - active);
+            }, 0);
+          }, 0) || 0;
+          const totalTenants = building.floors?.reduce((total, f) => total + (f.rooms || []).reduce((t, r) => t + (r.tenants?.length || 0), 0), 0) || 0;
+          const isExpanded = expandedBuildings.has(building.id);
+
+          // Square box color schemes
+          const boxColors = [
+            { base: 'bg-emerald-500', hover: 'hover:bg-emerald-600', ring: 'ring-emerald-300', text: 'text-emerald-50', detailBg: 'bg-emerald-50', detailBorder: 'border-emerald-200', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700' },
+            { base: 'bg-blue-500', hover: 'hover:bg-blue-600', ring: 'ring-blue-300', text: 'text-blue-50', detailBg: 'bg-blue-50', detailBorder: 'border-blue-200', iconBg: 'bg-blue-100', iconColor: 'text-blue-700' },
+            { base: 'bg-violet-500', hover: 'hover:bg-violet-600', ring: 'ring-violet-300', text: 'text-violet-50', detailBg: 'bg-violet-50', detailBorder: 'border-violet-200', iconBg: 'bg-violet-100', iconColor: 'text-violet-700' },
+            { base: 'bg-amber-500', hover: 'hover:bg-amber-600', ring: 'ring-amber-300', text: 'text-amber-50', detailBg: 'bg-amber-50', detailBorder: 'border-amber-200', iconBg: 'bg-amber-100', iconColor: 'text-amber-700' },
+            { base: 'bg-rose-500', hover: 'hover:bg-rose-600', ring: 'ring-rose-300', text: 'text-rose-50', detailBg: 'bg-rose-50', detailBorder: 'border-rose-200', iconBg: 'bg-rose-100', iconColor: 'text-rose-700' },
+            { base: 'bg-teal-500', hover: 'hover:bg-teal-600', ring: 'ring-teal-300', text: 'text-teal-50', detailBg: 'bg-teal-50', detailBorder: 'border-teal-200', iconBg: 'bg-teal-100', iconColor: 'text-teal-700' },
+            { base: 'bg-indigo-500', hover: 'hover:bg-indigo-600', ring: 'ring-indigo-300', text: 'text-indigo-50', detailBg: 'bg-indigo-50', detailBorder: 'border-indigo-200', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700' },
+            { base: 'bg-orange-500', hover: 'hover:bg-orange-600', ring: 'ring-orange-300', text: 'text-orange-50', detailBg: 'bg-orange-50', detailBorder: 'border-orange-200', iconBg: 'bg-orange-100', iconColor: 'text-orange-700' },
+          ];
+          const clr = boxColors[bIdx % boxColors.length];
+
+          return (
+            <div key={building.id} className="relative group">
+              {/* Square Color Box */}
+              <div
+                onClick={() => toggleBuilding(building.id)}
+                className={`aspect-square rounded-2xl ${clr.base} ${clr.hover} ${isExpanded ? `ring-4 ${clr.ring} shadow-lg scale-[0.97]` : 'shadow-md hover:shadow-lg hover:scale-[1.03]'} cursor-pointer transition-all duration-200 ease-in-out relative overflow-hidden`}
+              >
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-10">
+                  <div className="absolute top-2 right-2 size-20 rounded-full border-2 border-white/30" />
+                  <div className="absolute bottom-2 left-2 size-14 rounded-full border-2 border-white/20" />
+                </div>
+
+                {/* Content */}
+                <div className="relative z-10 h-full flex flex-col items-center justify-center p-2 sm:p-3 text-center">
+                  {/* Building Icon */}
+                  <div className="flex items-center justify-center size-9 sm:size-11 rounded-xl bg-white/20 backdrop-blur-sm mb-1.5 sm:mb-2">
+                    <Building2 className="size-4 sm:size-5 text-white" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-white/80 hover:text-white hover:bg-white/20"
-                      onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name, building.capacityPerRoom); }}
-                    >
-                      <Edit3 className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-white/80 hover:text-white hover:bg-white/20"
-                      onClick={(e) => { e.stopPropagation(); openDeleteDialog(building.id, building.name); }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                    {expandedBuildings.has(building.id) ? (
-                      <ChevronDown className="size-5 text-white/80" />
+                  {/* Building Name */}
+                  <h3 className="text-white font-bold text-xs sm:text-sm leading-tight line-clamp-2 mb-1 sm:mb-2">{building.name}</h3>
+                  {/* Quick Stats */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[9px] sm:text-[10px] text-white/90">
+                    <span className="flex items-center gap-0.5">
+                      <Layers className="size-2.5 sm:size-3" />
+                      {toBanglaNumber(building.totalFloors)}
+                    </span>
+                    <span className="text-white/40">|</span>
+                    <span className="flex items-center gap-0.5">
+                      <BedDouble className="size-2.5 sm:size-3" />
+                      {toBanglaNumber(totalRooms)}
+                    </span>
+                    <span className="text-white/40">|</span>
+                    <span className="flex items-center gap-0.5">
+                      <Users className="size-2.5 sm:size-3" />
+                      {toBanglaNumber(totalTenants)}
+                    </span>
+                  </div>
+                  {/* Expand Indicator */}
+                  <div className="absolute bottom-1.5 sm:bottom-2 right-1.5 sm:right-2">
+                    {isExpanded ? (
+                      <ChevronDown className="size-3.5 sm:size-4 text-white/70" />
                     ) : (
-                      <ChevronRight className="size-5 text-white/80" />
+                      <ChevronRight className="size-3.5 sm:size-4 text-white/70" />
                     )}
                   </div>
                 </div>
-              </div>
-              {/* Stats Row */}
-              <div className={`grid grid-cols-3 gap-0 ${colors.lightBg} px-5 py-3.5 border-b`}>
-                <div className={`flex flex-col items-center py-2 ${statGridBorder('left', colors.statBorder)}`}>
-                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
-                    <Layers className="size-4" />
-                  </span>
-                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(building.totalFloors)}</span>
-                  <span className="text-[11px] text-muted-foreground">তলা</span>
-                </div>
-                <div className={`flex flex-col items-center py-2 border-x ${colors.statBorder}`}>
-                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
-                    <BedDouble className="size-4" />
-                  </span>
-                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(totalRooms)}</span>
-                  <span className="text-[11px] text-muted-foreground">রুম</span>
-                </div>
-                <div className={`flex flex-col items-center py-2 ${statGridBorder('right', colors.statBorder)}`}>
-                  <span className={`flex items-center justify-center size-8 rounded-lg ${colors.iconBg} ${colors.iconColor} mb-1.5`}>
-                    <Users className="size-4" />
-                  </span>
-                  <span className="text-base font-bold text-gray-800">{toBanglaNumber(totalEmptySeats)}</span>
-                  <span className="text-[11px] text-muted-foreground">খালি সিট</span>
-                </div>
-              </div>
-              </div>
-            </CollapsibleTrigger>
 
-            <CollapsibleContent>
-              <div className="border-t">
-                {building.floors?.length === 0 && (
-                  <p className="text-center text-muted-foreground py-4 text-sm">
-                    কোনো তলা নেই
-                  </p>
-                )}
-                {building.floors?.map((floor) => (
-                  <div
-                    key={floor.id}
-                    className="border-b last:border-b-0 p-4"
+                {/* Action Buttons (visible on hover) */}
+                <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openEditBuildingDialog(building.id, building.name, building.capacityPerRoom); }}
+                    className="flex items-center justify-center size-6 sm:size-7 rounded-lg bg-white/25 backdrop-blur-sm text-white hover:bg-white/40 transition-colors"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-sm flex items-center gap-2">
-                        <span className="flex items-center justify-center size-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold">
-                          {floor.floorNumber}
-                        </span>
-                        {floor.floorNumber === 1
-                          ? "১ম তলা"
-                          : floor.floorNumber === 2
-                            ? "২য় তলা"
-                            : floor.floorNumber === 3
-                              ? "৩য় তলা"
-                              : floor.floorNumber === 4
-                                ? "৪র্থ তলা"
-                                : floor.floorNumber === 5
-                                  ? "৫ম তলা"
-                                  : `${floor.floorNumber} তলা`}
-                      </h4>
-                      <Dialog open={addRoomOpen} onOpenChange={setAddRoomOpen}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1 text-xs"
-                            onClick={() => setAddRoomFloorId(floor.id)}
-                          >
-                            <Plus className="size-3" />
-                            রুম যোগ করুন
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>নতুন রুম যোগ করুন</DialogTitle>
-                            <DialogDescription>
-                              {building.name} - {floor.floorNumber} তলায় নতুন
-                              রুম যোগ করুন
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label>রুম নম্বর</Label>
-                              <Input
-                                placeholder="যেমন: ১০১"
-                                value={addRoomNumber}
-                                onChange={(e) =>
-                                  setAddRoomNumber(e.target.value)
-                                }
-                              />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              variant="outline"
-                              onClick={() => setAddRoomOpen(false)}
-                            >
-                              বাতিল
-                            </Button>
-                            <Button
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                              onClick={handleCreateRoom}
-                              disabled={creatingRoom}
-                            >
-                              {creatingRoom ? "যোগ হচ্ছে..." : "যোগ করুন"}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
+                    <Edit3 className="size-3 sm:size-3.5" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openDeleteDialog(building.id, building.name); }}
+                    className="flex items-center justify-center size-6 sm:size-7 rounded-lg bg-white/25 backdrop-blur-sm text-white hover:bg-red-400/60 transition-colors"
+                  >
+                    <Trash2 className="size-3 sm:size-3.5" />
+                  </button>
+                </div>
+              </div>
 
-                    {floor.rooms?.length === 0 && (
-                      <p className="text-sm text-muted-foreground pl-8">
-                        এই তলায় কোনো রুম নেই
+              {/* Expanded Building Details Panel */}
+              {isExpanded && (
+                <div className={`mt-2 sm:mt-3 rounded-xl border ${clr.detailBorder} ${clr.detailBg} shadow-md overflow-hidden`}>
+                  {/* Stats Bar */}
+                  <div className="grid grid-cols-4 gap-0 px-2 py-2 sm:px-3 sm:py-2.5 border-b border-white/50">
+                    <div className={`flex flex-col items-center ${clr.iconBg} rounded-lg py-1 sm:py-1.5`}>
+                      <span className={`text-[10px] sm:text-xs font-bold ${clr.iconColor}`}>{toBanglaNumber(building.totalFloors)}</span>
+                      <span className="text-[8px] sm:text-[10px] text-muted-foreground">তলা</span>
+                    </div>
+                    <div className={`flex flex-col items-center ${clr.iconBg} rounded-lg py-1 sm:py-1.5`}>
+                      <span className={`text-[10px] sm:text-xs font-bold ${clr.iconColor}`}>{toBanglaNumber(totalRooms)}</span>
+                      <span className="text-[8px] sm:text-[10px] text-muted-foreground">রুম</span>
+                    </div>
+                    <div className={`flex flex-col items-center ${clr.iconBg} rounded-lg py-1 sm:py-1.5`}>
+                      <span className={`text-[10px] sm:text-xs font-bold ${clr.iconColor}`}>{toBanglaNumber(totalTenants)}</span>
+                      <span className="text-[8px] sm:text-[10px] text-muted-foreground">ভাড়াটে</span>
+                    </div>
+                    <div className={`flex flex-col items-center ${clr.iconBg} rounded-lg py-1 sm:py-1.5`}>
+                      <span className={`text-[10px] sm:text-xs font-bold ${clr.iconColor}`}>{toBanglaNumber(totalEmptySeats)}</span>
+                      <span className="text-[8px] sm:text-[10px] text-muted-foreground">খালি সিট</span>
+                    </div>
+                  </div>
+
+                  {/* Floors & Rooms */}
+                  <div className="p-2 sm:p-3 space-y-2 sm:space-y-3">
+                    {building.floors?.length === 0 && (
+                      <p className="text-center text-muted-foreground py-3 text-xs">
+                        কোনো তলা নেই
                       </p>
                     )}
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 pl-8">
-                      {floor.rooms?.map((room) => (
-                        <div
-                          key={room.id}
-                          className="flex items-center justify-between bg-white rounded-lg border px-3 py-2 text-sm group"
-                        >
-                          <div className="flex items-center gap-2">
-                            <BedDouble className="size-3.5 text-emerald-600" />
-                            <span className="font-medium">
-                              {room.roomNumber}
+                    {building.floors?.map((floor) => (
+                      <div key={floor.id} className="border border-white/60 rounded-lg p-2 sm:p-3 last:border-b-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-xs sm:text-sm flex items-center gap-1.5">
+                            <span className={`flex items-center justify-center size-5 sm:size-6 rounded-full ${clr.iconBg} ${clr.iconColor} text-[10px] sm:text-xs font-bold`}>
+                              {floor.floorNumber}
                             </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {room.tenants?.length > 0 && (
-                              <span className="size-2 rounded-full bg-emerald-500" />
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="size-6 p-0 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-blue-600 hover:bg-blue-50"
-                              onClick={() => openEditRoomDialog(room.id, room.roomNumber)}
+                            {floor.floorNumber === 1
+                              ? "১ম তলা"
+                              : floor.floorNumber === 2
+                                ? "২য় তলা"
+                                : floor.floorNumber === 3
+                                  ? "৩য় তলা"
+                                  : floor.floorNumber === 4
+                                    ? "৪র্থ তলা"
+                                    : floor.floorNumber === 5
+                                      ? "৫ম তলা"
+                                      : `${floor.floorNumber} তলা`}
+                          </h4>
+                          <Dialog open={addRoomOpen} onOpenChange={setAddRoomOpen}>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-[10px] sm:text-xs h-6 sm:h-7 px-1.5 sm:px-2"
+                                onClick={() => setAddRoomFloorId(floor.id)}
+                              >
+                                <Plus className="size-2.5 sm:size-3" />
+                                <span className="hidden sm:inline">রুম যোগ করুন</span>
+                                <span className="sm:hidden">+</span>
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>নতুন রুম যোগ করুন</DialogTitle>
+                                <DialogDescription>
+                                  {building.name} - {floor.floorNumber} তলায় নতুন রুম যোগ করুন
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                <div className="space-y-2">
+                                  <Label>রুম নম্বর</Label>
+                                  <Input
+                                    placeholder="যেমন: ১০১"
+                                    value={addRoomNumber}
+                                    onChange={(e) => setAddRoomNumber(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setAddRoomOpen(false)}>বাতিল</Button>
+                                <Button
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={handleCreateRoom}
+                                  disabled={creatingRoom}
+                                >
+                                  {creatingRoom ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+
+                        {floor.rooms?.length === 0 && (
+                          <p className="text-[10px] sm:text-xs text-muted-foreground pl-6 sm:pl-8">এই তলায় কোনো রুম নেই</p>
+                        )}
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 sm:gap-2 pl-6 sm:pl-8">
+                          {floor.rooms?.map((room) => (
+                            <div
+                              key={room.id}
+                              className="flex items-center justify-between bg-white rounded-lg border px-2 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-sm group/room"
                             >
-                              <Edit3 className="size-3" />
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
+                              <div className="flex items-center gap-1.5">
+                                <BedDouble className="size-3 sm:size-3.5 text-emerald-600" />
+                                <span className="font-medium">{room.roomNumber}</span>
+                              </div>
+                              <div className="flex items-center gap-0.5">
+                                {room.tenants?.length > 0 && (
+                                  <span className="size-1.5 sm:size-2 rounded-full bg-emerald-500" />
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="size-6 p-0 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-600 hover:bg-red-50"
+                                  className="size-5 sm:size-6 p-0 text-blue-400 opacity-0 group-hover/room:opacity-100 transition-opacity hover:text-blue-600 hover:bg-blue-50"
+                                  onClick={() => openEditRoomDialog(room.id, room.roomNumber)}
                                 >
-                                  <Trash2 className="size-3" />
+                                  <Edit3 className="size-2.5 sm:size-3" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    রুম মুছে ফেলবেন?
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    রুম {room.roomNumber} স্থায়ীভাবে মুছে যাবে।
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>বাতিল</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-red-600 hover:bg-red-700 text-white"
-                                    onClick={() =>
-                                      handleDeleteRoom(room.id)
-                                    }
-                                    disabled={deletingRoom}
-                                  >
-                                    মুছে ফেলুন
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="size-5 sm:size-6 p-0 text-red-400 opacity-0 group-hover/room:opacity-100 transition-opacity hover:text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="size-2.5 sm:size-3" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>রুম মুছে ফেলবেন?</AlertDialogTitle>
+                                      <AlertDialogDescription>রুম {room.roomNumber} স্থায়ীভাবে মুছে যাবে।</AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>বাতিল</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-red-600 hover:bg-red-700 text-white"
+                                        onClick={() => handleDeleteRoom(room.id)}
+                                        disabled={deletingRoom}
+                                      >
+                                        মুছে ফেলুন
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-        );
-      })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
