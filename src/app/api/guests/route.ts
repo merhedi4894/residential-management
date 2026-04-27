@@ -6,8 +6,50 @@ function toEnglishDigits(str: string): string {
   return str.replace(/[০-৯]/g, (d) => String(bengaliDigits.indexOf(d)));
 }
 
+// Self-migration: ensure Guest table has all required columns
+// This runs automatically to fix schema drift between Prisma schema and actual DB
+let migrationRan = false;
+async function ensureGuestColumns() {
+  if (migrationRan) return;
+  try {
+    // Check which columns exist in the Guest table
+    const tableInfo = await db.$queryRawUnsafe<{ name: string }[]>(
+      `PRAGMA table_info("Guest")`
+    );
+    const existingCols = new Set(tableInfo.map((c) => c.name));
+
+    const migrations: { col: string; type: string }[] = [];
+    if (!existingCols.has("checkInTime")) migrations.push({ col: "checkInTime", type: "TEXT" });
+    if (!existingCols.has("checkOutTime")) migrations.push({ col: "checkOutTime", type: "TEXT" });
+    if (!existingCols.has("roomId")) migrations.push({ col: "roomId", type: "TEXT" });
+    if (!existingCols.has("roomNumber")) migrations.push({ col: "roomNumber", type: "TEXT" });
+    if (!existingCols.has("isBooked")) migrations.push({ col: "isBooked", type: "BOOLEAN DEFAULT 0" });
+
+    for (const m of migrations) {
+      try {
+        await db.$executeRawUnsafe(
+          `ALTER TABLE "Guest" ADD COLUMN "${m.col}" ${m.type}`
+        );
+        console.log(`[guest-migration] Added column: ${m.col}`);
+      } catch (e) {
+        console.log(`[guest-migration] Column ${m.col} already exists or error:`, e);
+      }
+    }
+
+    migrationRan = true;
+    if (migrations.length > 0) {
+      console.log(`[guest-migration] Migrated ${migrations.length} columns`);
+    }
+  } catch (error) {
+    console.error("[guest-migration] Migration check failed:", error);
+    // Don't block the request even if migration fails
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
+    await ensureGuestColumns();
+
     const { searchParams } = new URL(req.url);
     const all = searchParams.get("all");
     const month = searchParams.get("month");
@@ -55,6 +97,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureGuestColumns();
+
     const body = await req.json();
     const { name, address, mobile, referredBy, checkInDate, checkInTime, checkOutDate, checkOutTime, totalBill, note, isPaid, roomId, roomNumber, isBooked } = body;
 
@@ -103,6 +147,8 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
+    await ensureGuestColumns();
+
     const body = await req.json();
     const { id, name, address, mobile, referredBy, checkInDate, checkOutDate, checkInTime, checkOutTime, totalBill, note, isPaid, roomId, roomNumber, isBooked } = body;
 
@@ -146,6 +192,8 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    await ensureGuestColumns();
+
     const { id } = await req.json();
     if (!id) {
       return NextResponse.json({ error: "গেস্ট ID প্রয়োজন" }, { status: 400 });
