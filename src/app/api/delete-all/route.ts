@@ -26,16 +26,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ভুল পাসওয়ার্ড' }, { status: 401 });
     }
 
-    // Delete all data in correct order (respecting FK constraints)
-    // VacateRecord -> Inventory -> TroubleReport -> Tenant -> Room -> Floor -> Building
-    await db.vacateRecord.deleteMany();
-    await db.inventory.deleteMany();
-    await db.troubleReport.deleteMany();
-    await db.tenant.deleteMany();
-    await db.room.deleteMany();
-    await db.floor.deleteMany();
-    await db.building.deleteMany();
-    await db.guest.deleteMany();
+    // Delete all data — Building cascades to Floor→Room→Tenant,TroubleReport,VacateRecord,Inventory
+    // Guest is independent (no FK to other tables)
+    await Promise.all([
+      db.building.deleteMany(),
+      db.guest.deleteMany(),
+    ]);
 
     return NextResponse.json({ success: true, message: 'সমস্ত ডাটা মুছে ফেলা হয়েছে' });
   } catch (error) {

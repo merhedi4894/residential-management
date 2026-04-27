@@ -12,36 +12,34 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'রুম আইডি দিন' }, { status: 400 });
     }
 
-    // Get room info
-    const room = await db.room.findUnique({
-      where: { id: roomId },
-      include: {
-        floor: {
-          include: { building: true },
+    // Parallelize all 3 queries — they all only depend on URL param roomId
+    const [room, allTenants, allInventory] = await Promise.all([
+      db.room.findUnique({
+        where: { id: roomId },
+        include: {
+          floor: {
+            include: { building: true },
+          },
         },
-      },
-    });
+      }),
+      db.tenant.findMany({
+        where: { roomId },
+        orderBy: { createdAt: 'desc' },
+      }),
+      db.inventory.findMany({
+        where: { roomId },
+        include: { tenant: { select: { id: true, name: true } } },
+        orderBy: { addedDate: 'desc' },
+      }),
+    ]);
 
     if (!room) {
       return NextResponse.json({ error: 'রুম পাওয়া যায়নি' }, { status: 404 });
     }
 
-    // Get all tenants for this room, ordered by createdAt desc (newest first)
-    const allTenants = await db.tenant.findMany({
-      where: { roomId },
-      orderBy: { createdAt: 'desc' },
-    });
-
     // Separate current (active) and previous (inactive) tenants
     const currentTenant = allTenants.find((t) => t.isActive) || null;
     const previousTenants = allTenants.filter((t) => !t.isActive);
-
-    // Get all inventory for this room
-    const allInventory = await db.inventory.findMany({
-      where: { roomId },
-      include: { tenant: { select: { id: true, name: true } } },
-      orderBy: { addedDate: 'desc' },
-    });
 
     // Separate current and previous inventory
     let currentInventory: typeof allInventory = [];
@@ -51,12 +49,10 @@ export async function GET(req: NextRequest) {
       currentInventory = allInventory.filter((inv) => inv.tenantId === currentTenant.id);
       previousInventory = allInventory.filter((inv) => inv.tenantId !== currentTenant.id && inv.tenantId !== null);
     } else if (allTenants.length > 0) {
-      // No active tenant, use latest tenant's items as current
       const latestTenant = allTenants[0];
       currentInventory = allInventory.filter((inv) => inv.tenantId === latestTenant.id);
       previousInventory = allInventory.filter((inv) => inv.tenantId !== latestTenant.id && inv.tenantId !== null);
     } else {
-      // No tenants at all
       currentInventory = allInventory.filter((inv) => !inv.tenantId);
       previousInventory = [];
     }

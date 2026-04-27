@@ -12,20 +12,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'বিল্ডিং আইডি দরকার' }, { status: 400 });
     }
 
-    // Get all belonging templates for this building
-    const templates = await db.belongingTemplate.findMany({
-      where: { buildingId },
-    });
+    // Get templates and floors in parallel
+    const [templates, floors] = await Promise.all([
+      db.belongingTemplate.findMany({ where: { buildingId } }),
+      db.floor.findMany({
+        where: { buildingId },
+        include: { rooms: true },
+      }),
+    ]);
 
     if (templates.length === 0) {
       return NextResponse.json({ error: 'এই বিল্ডিংয়ে কোনো মালামাল টেমপ্লেট নেই' }, { status: 400 });
     }
-
-    // Get all rooms in this building (ONE query instead of per-floor)
-    const floors = await db.floor.findMany({
-      where: { buildingId },
-      include: { rooms: true },
-    });
 
     const allRooms = floors.flatMap((f) => f.rooms);
     if (allRooms.length === 0) {

@@ -159,9 +159,8 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'কোনো বিল্ডিং নেই' }, { status: 404 });
       }
 
-      for (const b of buildings) {
-        await addBuildingSheet(b.id);
-      }
+      // Process buildings in parallel for faster download
+      await Promise.all(buildings.map(b => addBuildingSheet(b.id)));
 
       fileNamePrefix = 'সকল_বিল্ডিং_মালামাল_তালিকা';
     } else {

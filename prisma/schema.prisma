@@ -28,6 +28,8 @@ model Floor {
   updatedAt  DateTime  @updatedAt
   building   Building  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   rooms      Room[]
+
+  @@index([buildingId])
 }
 
 // Rooms on a floor
@@ -42,6 +44,8 @@ model Room {
   inventories   Inventory[]
   troubleReports TroubleReport[]
   vacateRecords VacateRecord[]
+
+  @@index([floorId])
 }
 
 // Tenants occupying rooms
@@ -59,6 +63,8 @@ model Tenant {
   room          Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
   inventories   Inventory[]
   vacateRecords VacateRecord[]
+
+  @@index([roomId])
 }
 
 // Inventory items in a room - tracks items per tenant occupancy
@@ -76,6 +82,9 @@ model Inventory {
   updatedAt   DateTime @updatedAt
   room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([roomId])
+  @@index([tenantId])
 }
 
 // System users for authentication
@@ -89,6 +98,8 @@ model User {
   isSetup          Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  @@index([sessionToken])
 }
 
 // Trouble reports for rooms
@@ -106,6 +117,8 @@ model TroubleReport {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   room        Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
 }
 
 // Vacate records when tenant leaves
@@ -120,6 +133,9 @@ model VacateRecord {
   tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   room             Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
   createdAt        DateTime @default(now())
+
+  @@index([roomId])
+  @@index([tenantId])
 }
 
 // Belonging templates per building - default items for all rooms
@@ -131,6 +147,8 @@ model BelongingTemplate {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   building   Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@index([buildingId])
 }
 
 // Guest management
@@ -152,4 +170,7 @@ model Guest {
   roomNumber    String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  @@index([roomId])
+  @@index([checkInDate])
 }

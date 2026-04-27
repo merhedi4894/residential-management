@@ -48,18 +48,18 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ mode: 'allRooms', rooms: [] });
       }
 
-      // Step 3: Fetch ALL inventory for ALL rooms in ONE query (instead of N queries)
-      const allInventory = await db.inventory.findMany({
-        where: { roomId: { in: allRoomIds } },
-        orderBy: { addedDate: 'desc' },
-        include: { tenant: { select: { id: true, name: true } } },
-      });
-
-      // Step 4: Fetch ALL vacate records for ALL rooms in ONE query (instead of N queries)
-      const allVacateRecords = await db.vacateRecord.findMany({
-        where: { roomId: { in: allRoomIds } },
-        orderBy: { vacatedAt: 'desc' },
-      });
+      // Step 3+4: Fetch inventory and vacate records in parallel
+      const [allInventory, allVacateRecords] = await Promise.all([
+        db.inventory.findMany({
+          where: { roomId: { in: allRoomIds } },
+          orderBy: { addedDate: 'desc' },
+          include: { tenant: { select: { id: true, name: true } } },
+        }),
+        db.vacateRecord.findMany({
+          where: { roomId: { in: allRoomIds } },
+          orderBy: { vacatedAt: 'desc' },
+        }),
+      ]);
 
       // Step 5: Group inventory and vacate records by roomId in memory
       const inventoryByRoom = new Map<string, typeof allInventory>();
@@ -144,11 +144,18 @@ export async function GET(req: NextRequest) {
     const currentTenants = allTenants.filter((t) => t.isActive);
     const previousTenants = allTenants.filter((t) => !t.isActive);
 
-    const allInventory = await db.inventory.findMany({
-      where: { roomId: room.id },
-      orderBy: { addedDate: 'desc' },
-      include: { tenant: { select: { id: true, name: true } } },
-    });
+    // Fetch inventory and vacate records in parallel
+    const [allInventory, vacateRecords] = await Promise.all([
+      db.inventory.findMany({
+        where: { roomId: room.id },
+        orderBy: { addedDate: 'desc' },
+        include: { tenant: { select: { id: true, name: true } } },
+      }),
+      db.vacateRecord.findMany({
+        where: { roomId: room.id },
+        orderBy: { vacatedAt: 'desc' },
+      }),
+    ]);
 
     let currentInventory = allInventory;
     let previousInventory: typeof allInventory = [];
@@ -175,11 +182,6 @@ export async function GET(req: NextRequest) {
       currentInventory = allInventory;
       previousInventory = [];
     }
-
-    const vacateRecords = await db.vacateRecord.findMany({
-      where: { roomId: room.id },
-      orderBy: { vacatedAt: 'desc' },
-    });
 
     return NextResponse.json({
       roomNumber: room.roomNumber,

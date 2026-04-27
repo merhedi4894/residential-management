@@ -7,32 +7,24 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const roomId = searchParams.get('roomId');
     
+    // Single deep query instead of 3 sequential queries
     const tenants = await db.tenant.findMany({
       where: roomId ? { roomId } : undefined,
       include: {
         room: {
-          select: { id: true, roomNumber: true, floorId: true },
+          include: {
+            floor: {
+              include: { building: { select: { id: true, name: true } } }
+            }
+          }
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Attach building name to each tenant
-    const floors = await db.floor.findMany({
-      where: { id: { in: [...new Set(tenants.map(t => t.room.floorId))] } },
-      select: { id: true, buildingId: true },
-    });
-    const buildingIds = [...new Set(floors.map(f => f.buildingId))];
-    const bldgs = await db.building.findMany({
-      where: { id: { in: buildingIds } },
-      select: { id: true, name: true },
-    });
-    const bldgMap = Object.fromEntries(bldgs.map(b => [b.id, b.name]));
-    const floorMap = Object.fromEntries(floors.map(f => [f.id, f.buildingId]));
-
     const tenantsWithBuilding = tenants.map(t => ({
       ...t,
-      buildingName: bldgMap[floorMap[t.room.floorId]] || "",
+      buildingName: t.room?.floor?.building?.name || "",
     }));
 
     return NextResponse.json(tenantsWithBuilding);

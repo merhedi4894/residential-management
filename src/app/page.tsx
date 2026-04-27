@@ -736,6 +736,10 @@ function BuildingsTab() {
   const [vacateCheckOutTime, setVacateCheckOutTime] = useState("");
   const [vacatingGuestInRoom, setVacatingGuestInRoom] = useState(false);
 
+  // Previous tenants pagination in room detail dialog
+  const [prevTenantPage, setPrevTenantPage] = useState(1);
+  const PREV_TENANT_PER_PAGE = 5;
+
   // Edit tenant from room detail dialog
   const [editTenantInRoom, setEditTenantInRoom] = useState(false);
   const [editTenantIdInRoom, setEditTenantIdInRoom] = useState("");
@@ -1268,6 +1272,7 @@ function BuildingsTab() {
     setRoomDetailLoading(true);
     setRoomDetailOpen(true);
     setRoomDetailData(null);
+    setPrevTenantPage(1);
     try {
       const res = await fetch(`/api/room-wise-data?roomId=${roomId}`);
       if (!res.ok) throw new Error();
@@ -2011,29 +2016,44 @@ function BuildingsTab() {
                 )}
 
                 {/* Previous Tenants */}
-                {roomDetailData.previousTenants.length > 0 && (
-                  <div>
-                    <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
-                      <Clock className="size-4 text-gray-400" />
-                      পূর্বের ভাড়াটে
-                      <Badge variant="outline" className="text-[10px]">{toBanglaNumber(roomDetailData.previousTenants.length)} জন</Badge>
-                    </h4>
-                    <div className="space-y-1">
-                      {roomDetailData.previousTenants.map((t) => (
-                        <div key={t.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs">
-                          <div>
-                            <span className="font-medium text-gray-700">{t.name}</span>
-                            {t.designation && <span className="text-gray-400 ml-1">— {t.designation}</span>}
+                {(() => {
+                  const prevTenants = roomDetailData.previousTenants;
+                  const totalPages = Math.ceil(prevTenants.length / PREV_TENANT_PER_PAGE);
+                  const pageTenants = prevTenants.slice((prevTenantPage - 1) * PREV_TENANT_PER_PAGE, prevTenantPage * PREV_TENANT_PER_PAGE);
+                  if (prevTenants.length === 0) return null;
+                  return (
+                    <div>
+                      <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
+                        <Clock className="size-4 text-gray-400" />
+                        পূর্বের ভাড়াটে
+                        <Badge variant="outline" className="text-[10px]">{toBanglaNumber(prevTenants.length)} জন</Badge>
+                      </h4>
+                      <div className="space-y-1">
+                        {pageTenants.map((t) => (
+                          <div key={t.id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs">
+                            <div>
+                              <span className="font-medium text-gray-700">{t.name}</span>
+                              {t.designation && <span className="text-gray-400 ml-1">— {t.designation}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 text-gray-400">
+                              {t.startDate && <span>{formatDate(t.startDate)}</span>}
+                              {t.endDate && <span>→ {formatDate(t.endDate)}</span>}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2 text-gray-400">
-                            {t.startDate && <span>{formatDate(t.startDate)}</span>}
-                            {t.endDate && <span>→ {formatDate(t.endDate)}</span>}
-                          </div>
+                        ))}
+                      </div>
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={prevTenantPage <= 1} onClick={() => setPrevTenantPage(prevTenantPage - 1)}>আগে</Button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                            <Button key={p} variant={p === prevTenantPage ? "default" : "outline"} size="sm" className="h-6 w-6 text-[10px] p-0" onClick={() => setPrevTenantPage(p)}>{p}</Button>
+                          ))}
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={prevTenantPage >= totalPages} onClick={() => setPrevTenantPage(prevTenantPage + 1)}>পরে</Button>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Previous Inventory */}
                 {roomDetailData.previousInventory.length > 0 && (
@@ -4651,7 +4671,7 @@ function OverviewTab() {
   const [data, setData] = useState<(RoomWiseData & { mode?: string; rooms?: any[] }) | null>(null);
   const [overviewSubTab, setOverviewSubTab] = useState<"tenants" | "inventory">("tenants");
   const [prevPage, setPrevPage] = useState(1);
-  const prevPerPage = 10;
+  const prevPerPage = 5;
 
   const [editTenantOpen, setEditTenantOpen] = useState(false);
   const [editTenantData, setEditTenantData] = useState<{ id: string; name: string; designation: string; phone: string; } | null>(null);
