@@ -672,6 +672,7 @@ function BuildingsTab() {
   // Guest time fields
   const [guestCheckInTime, setGuestCheckInTime] = useState("");
   const [guestCheckOutTime, setGuestCheckOutTime] = useState("");
+  const [guestIsPaid, setGuestIsPaid] = useState(true);
 
   // Current guests for this room
   const [currentGuestsInRoom, setCurrentGuestsInRoom] = useState<{
@@ -693,6 +694,7 @@ function BuildingsTab() {
   const [editGuestCheckOutTimeInRoom, setEditGuestCheckOutTimeInRoom] = useState("");
   const [editGuestTotalBillInRoom, setEditGuestTotalBillInRoom] = useState("");
   const [editGuestNoteInRoom, setEditGuestNoteInRoom] = useState("");
+  const [editGuestIsPaidInRoom, setEditGuestIsPaidInRoom] = useState(true);
   const [savingGuestEditInRoom, setSavingGuestEditInRoom] = useState(false);
 
   // Delete guest confirm dialog
@@ -829,11 +831,12 @@ function BuildingsTab() {
           checkInTime: guestCheckInTime.trim() || null,
           checkOutDate: checkOutDateTime,
           checkOutTime: guestCheckOutTime.trim() || null,
-          totalBill: guestTotalBill.trim(),
+          totalBill: guestIsPaid ? (guestTotalBill.trim() || null) : "Non Paid",
           note: guestNote.trim(),
           roomId: roomDetailData.roomId,
           roomNumber: roomDetailData.roomNumber,
           isBooked: true,
+          isPaid: guestIsPaid,
         }),
       });
       if (!res.ok) throw new Error();
@@ -848,6 +851,7 @@ function BuildingsTab() {
       setGuestCheckOutTime("");
       setGuestTotalBill("");
       setGuestNote("");
+      setGuestIsPaid(true);
       setAddGuestToRoom(false);
       loadCurrentGuestsForRoom(roomDetailData.roomId);
       refreshData();
@@ -868,8 +872,9 @@ function BuildingsTab() {
     setEditGuestCheckInTimeInRoom(g.checkInTime || "");
     setEditGuestCheckOutDateInRoom(g.checkOutDate?.split('T')[0] || "");
     setEditGuestCheckOutTimeInRoom(g.checkOutTime || "");
-    setEditGuestTotalBillInRoom(g.totalBill || "");
+    setEditGuestTotalBillInRoom(g.totalBill === "Non Paid" ? "" : g.totalBill || "");
     setEditGuestNoteInRoom(g.note || "");
+    setEditGuestIsPaidInRoom(g.isPaid);
     setEditGuestInRoom(true);
   };
 
@@ -892,8 +897,9 @@ function BuildingsTab() {
           checkInTime: editGuestCheckInTimeInRoom.trim() || null,
           checkOutDate: checkOutDateTime,
           checkOutTime: editGuestCheckOutTimeInRoom.trim() || null,
-          totalBill: editGuestTotalBillInRoom.trim(),
+          totalBill: editGuestIsPaidInRoom ? (editGuestTotalBillInRoom.trim() || null) : "Non Paid",
           note: editGuestNoteInRoom.trim(),
+          isPaid: editGuestIsPaidInRoom,
         }),
       });
       if (!res.ok) throw new Error();
@@ -1647,6 +1653,10 @@ function BuildingsTab() {
                 <h4 className="text-sm font-semibold text-blue-800 flex items-center gap-1.5">
                   <Plus className="size-4" /> নতুন গেস্ট বুকিং
                 </h4>
+                <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+                  <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${guestIsPaid ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setGuestIsPaid(true)}>Paid</button>
+                  <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${!guestIsPaid ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => { setGuestIsPaid(false); setGuestTotalBill(""); }}>Non Paid</button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label className="text-xs">নাম *</Label>
@@ -1680,10 +1690,17 @@ function BuildingsTab() {
                     <Label className="text-xs">চেক-আউট সময়</Label>
                     <Input className="h-8 text-sm" type="time" value={guestCheckOutTime} onChange={(e) => setGuestCheckOutTime(e.target.value)} />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">বিল</Label>
-                    <Input className="h-8 text-sm" placeholder="মোট বিল" value={guestTotalBill} onChange={(e) => setGuestTotalBill(e.target.value)} />
-                  </div>
+                  {guestIsPaid ? (
+                    <div className="space-y-1">
+                      <Label className="text-xs">মোট বিল</Label>
+                      <Input className="h-8 text-sm" type="number" placeholder="মোট বিল" value={guestTotalBill} onChange={(e) => setGuestTotalBill(e.target.value)} />
+                    </div>
+                  ) : (
+                    <div className="col-span-1 sm:col-span-2 bg-orange-50 border border-orange-200 rounded-lg p-2.5">
+                      <p className="text-sm font-medium text-orange-700">Total Bill: Non Paid</p>
+                      <p className="text-xs text-orange-600 mt-0.5">এই গেস্ট Non Paid হিসেবে চিহ্নিত হবে</p>
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <Label className="text-xs">নোট</Label>
                     <Input className="h-8 text-sm" placeholder="নোট" value={guestNote} onChange={(e) => setGuestNote(e.target.value)} />
@@ -1711,7 +1728,7 @@ function BuildingsTab() {
                     <div key={g.id} className="bg-blue-50/70 border border-blue-100 rounded-lg px-3 py-2.5">
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm text-gray-800">{g.name}</p>
+                          <p className="font-semibold text-sm text-gray-800">{g.name} <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ml-1 ${g.isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>{g.isPaid ? "Paid" : "Non Paid"}</span></p>
                           {g.mobile && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="size-3" />{g.mobile}</p>}
                           {g.address && <p className="text-xs text-gray-500">{g.address}</p>}
                           {g.referredBy && <p className="text-xs text-gray-400">রেফার: {g.referredBy}</p>}
@@ -1726,6 +1743,7 @@ function BuildingsTab() {
                             </p>
                           )}
                           {g.totalBill && <p className="text-xs text-gray-600 mt-0.5">বিল: {g.totalBill}</p>}
+                          {!g.isPaid && !g.totalBill && <p className="text-xs text-orange-600 mt-0.5 font-medium">Non Paid</p>}
                           {g.note && <p className="text-xs text-gray-400 mt-0.5">{g.note}</p>}
                         </div>
                         <div className="flex gap-1 flex-shrink-0 ml-2">
@@ -2033,6 +2051,11 @@ function BuildingsTab() {
                 গেস্ট তথ্য সম্পাদনা
               </DialogTitle>
             </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${editGuestIsPaidInRoom ? "bg-emerald-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => setEditGuestIsPaidInRoom(true)}>Paid</button>
+                <button type="button" className={`flex-1 py-2 rounded-md text-sm font-medium transition-all ${!editGuestIsPaidInRoom ? "bg-orange-500 text-white shadow-sm" : "text-gray-600 hover:text-gray-800"}`} onClick={() => { setEditGuestIsPaidInRoom(false); setEditGuestTotalBillInRoom(""); }}>Non Paid</button>
+              </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label className="text-xs">নাম</Label>
@@ -2066,14 +2089,22 @@ function BuildingsTab() {
                 <Label className="text-xs">চেক-আউট সময়</Label>
                 <Input className="h-8 text-sm" type="time" value={editGuestCheckOutTimeInRoom} onChange={(e) => setEditGuestCheckOutTimeInRoom(e.target.value)} />
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">বিল</Label>
-                <Input className="h-8 text-sm" value={editGuestTotalBillInRoom} onChange={(e) => setEditGuestTotalBillInRoom(e.target.value)} />
-              </div>
+              {editGuestIsPaidInRoom ? (
+                <div className="space-y-1">
+                  <Label className="text-xs">বিল</Label>
+                  <Input className="h-8 text-sm" type="number" value={editGuestTotalBillInRoom} onChange={(e) => setEditGuestTotalBillInRoom(e.target.value)} />
+                </div>
+              ) : (
+                <div className="col-span-1 sm:col-span-2 bg-orange-50 border border-orange-200 rounded-lg p-2.5">
+                  <p className="text-sm font-medium text-orange-700">Total Bill: Non Paid</p>
+                  <p className="text-xs text-orange-600 mt-0.5">এই গেস্ট Non Paid হিসেবে চিহ্নিত হবে</p>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label className="text-xs">নোট</Label>
                 <Input className="h-8 text-sm" value={editGuestNoteInRoom} onChange={(e) => setEditGuestNoteInRoom(e.target.value)} />
               </div>
+            </div>
             </div>
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={() => setEditGuestInRoom(false)}>বাতিল</Button>
