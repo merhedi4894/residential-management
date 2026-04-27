@@ -551,11 +551,13 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
 
 function MainTabs() {
   const [activeTab, setActiveTab] = useState("buildings");
-  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["buildings"]));
+  // Cross-tab communication: when user clicks a room box to add tenant
+  const [pendingRoomForTenant, setPendingRoomForTenant] = useState<{
+    buildingId: string; floorId: string; roomId: string; roomNumber: string
+  } | null>(null);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    setVisitedTabs(prev => new Set([...prev, value]));
   };
 
   return (
@@ -593,19 +595,19 @@ function MainTabs() {
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">
-        <TabErrorBoundary><BuildingsTab /></TabErrorBoundary>
+        <TabErrorBoundary><BuildingsTab onRoomAddTenant={(data) => { setPendingRoomForTenant(data); setActiveTab("tenants"); }} /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        {visitedTabs.has("tenants") && <TabErrorBoundary><TenantsTab /></TabErrorBoundary>}
+        <TabErrorBoundary><TenantsTab pendingRoomForTenant={pendingRoomForTenant} onRoomHandled={() => setPendingRoomForTenant(null)} /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        {visitedTabs.has("overview") && <TabErrorBoundary><OverviewTab /></TabErrorBoundary>}
+        <TabErrorBoundary><OverviewTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        {visitedTabs.has("troubles") && <TabErrorBoundary><TroublesTab /></TabErrorBoundary>}
+        <TabErrorBoundary><TroublesTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="belongings" className="mt-6">
-        {visitedTabs.has("belongings") && <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>}
+        <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>
       </TabsContent>
     </Tabs>
   );
@@ -615,7 +617,7 @@ function MainTabs() {
 // TAB 1 — Buildings & Rooms
 // ═══════════════════════════════════════════════════════════════════════════
 
-function BuildingsTab() {
+function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingId: string; floorId: string; roomId: string; roomNumber: string }) => void }) {
   const { buildings, reloadBuildings, bookedRoomIds, reloadBookedRooms } = useBuildingsContext();
   const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(
     new Set()
@@ -2407,7 +2409,9 @@ function BuildingsTab() {
                             <div
                               key={room.id}
                               className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
-                              onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
+                              onClick={() => {
+                                onRoomAddTenant({ buildingId: building.id, floorId: floor.id, roomId: room.id, roomNumber: room.roomNumber });
+                              }}
                             >
                               <BedDouble className={`size-4 mb-1 ${hasGuestBooking ? 'text-red-600' : tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
                               <span className="font-bold text-xs text-gray-800">{room.roomNumber}</span>
@@ -2426,8 +2430,15 @@ function BuildingsTab() {
                                   <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
                                 </span>
                               )}
-                              {/* Edit & Delete on hover */}
+                              {/* View Details, Edit & Delete on hover */}
                               <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/room:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); openRoomDetailDialog(room.id, room.roomNumber, building.name); }}
+                                  className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-gray-500 hover:bg-gray-100 transition-colors"
+                                  title="রুমের বিস্তারিত"
+                                >
+                                  <Eye className="size-2.5" />
+                                </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openEditRoomDialog(room.id, room.roomNumber); }}
                                   className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-blue-500 hover:bg-blue-50 transition-colors"
@@ -2482,7 +2493,7 @@ function BuildingsTab() {
 // TAB 2 — Tenant Management
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TenantsTab() {
+function TenantsTab({ pendingRoomForTenant, onRoomHandled }: { pendingRoomForTenant: { buildingId: string; floorId: string; roomId: string; roomNumber: string } | null; onRoomHandled: () => void }) {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const { buildings } = useBuildingsContext();
   const [loading, setLoading] = useState(true);
@@ -2569,6 +2580,20 @@ function TenantsTab() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // When room box clicked from BuildingsTab, pre-fill add tenant form
+  useEffect(() => {
+    if (pendingRoomForTenant) {
+      resetAddForm();
+      setTBuildingId(pendingRoomForTenant.buildingId);
+      setTFloorId(pendingRoomForTenant.floorId);
+      setTRoomId(pendingRoomForTenant.roomId);
+      setTRoomNumber(pendingRoomForTenant.roomNumber);
+      setAddOpen(true);
+      setAddDialogTab("add");
+      onRoomHandled();
+    }
+  }, [pendingRoomForTenant]);
 
   const selectedBuilding = buildings.find((b) => b.id === tBuildingId);
   const selectedFloor = selectedBuilding?.floors?.find(
