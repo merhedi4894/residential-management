@@ -715,6 +715,7 @@ function BuildingsTab() {
           roomId: roomDetailData.roomId,
           roomNumber: roomDetailData.roomNumber,
           startDate: newTenantStartDate,
+          skipDeactivate: true,
         }),
       });
       if (!res.ok) throw new Error();
