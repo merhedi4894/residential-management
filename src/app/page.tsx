@@ -643,6 +643,79 @@ function BuildingsTab() {
   } | null>(null);
   const [roomDetailLoading, setRoomDetailLoading] = useState(false);
 
+  // Add tenant from room detail dialog
+  const [addTenantToRoom, setAddTenantToRoom] = useState(false);
+  const [newTenantName, setNewTenantName] = useState("");
+  const [newTenantDesignation, setNewTenantDesignation] = useState("");
+  const [newTenantPhone, setNewTenantPhone] = useState("");
+  const [newTenantStartDate, setNewTenantStartDate] = useState("");
+  const [addingTenantToRoom, setAddingTenantToRoom] = useState(false);
+
+  // Vacate tenant from room detail dialog
+  const [vacateTenantOpen, setVacateTenantOpen] = useState(false);
+  const [vacateTenantId, setVacateTenantId] = useState("");
+  const [vacateTenantName, setVacateTenantName] = useState("");
+  const [vacatingTenant, setVacatingTenant] = useState(false);
+
+  const handleAddTenantToRoom = async () => {
+    if (!newTenantName.trim() || !newTenantStartDate || !roomDetailData?.roomId) {
+      toast.error("নাম ও যোগদানের তারিখ দিন");
+      return;
+    }
+    setAddingTenantToRoom(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newTenantName.trim(),
+          designation: newTenantDesignation.trim(),
+          phone: newTenantPhone.trim(),
+          roomId: roomDetailData.roomId,
+          roomNumber: roomDetailData.roomNumber,
+          startDate: newTenantStartDate,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("ভাড়াটে যোগ হয়েছে");
+      setNewTenantName("");
+      setNewTenantDesignation("");
+      setNewTenantPhone("");
+      setNewTenantStartDate("");
+      setAddTenantToRoom(false);
+      refreshData();
+      // Reload room detail
+      openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+    } catch {
+      toast.error("ভাড়াটে যোগ করতে সমস্যা হয়েছে");
+    } finally {
+      setAddingTenantToRoom(false);
+    }
+  };
+
+  const handleVacateTenant = async () => {
+    if (!vacateTenantId) return;
+    setVacatingTenant(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: vacateTenantId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${vacateTenantName} রুম ছেড়েছেন`);
+      setVacateTenantOpen(false);
+      refreshData();
+      if (roomDetailData) {
+        openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+      }
+    } catch {
+      toast.error("রুম ছাড়াতে সমস্যা হয়েছে");
+    } finally {
+      setVacatingTenant(false);
+    }
+  };
+
   const openRoomDetailDialog = async (roomId: string, roomNumber: string, buildingName: string) => {
     setRoomDetailLoading(true);
     setRoomDetailOpen(true);
@@ -1065,7 +1138,7 @@ function BuildingsTab() {
         </Dialog>
 
         {/* Room Detail Dialog — Tenant & Belongings Info */}
-        <Dialog open={roomDetailOpen} onOpenChange={(open) => { setRoomDetailOpen(open); if (!open) setRoomDetailData(null); }}>
+        <Dialog open={roomDetailOpen} onOpenChange={(open) => { setRoomDetailOpen(open); if (!open) { setRoomDetailData(null); setAddTenantToRoom(false); } }}>
           <DialogContent className="max-w-lg sm:max-w-xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1077,6 +1150,92 @@ function BuildingsTab() {
               </DialogTitle>
               <DialogDescription>এই রুমের ভাড়াটে এবং মালামালের বিস্তারিত তথ্য</DialogDescription>
             </DialogHeader>
+
+            {/* Action Buttons: Add Tenant & Vacate */}
+            {!roomDetailLoading && roomDetailData && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => { setNewTenantStartDate(new Date().toISOString().split('T')[0]); setAddTenantToRoom(!addTenantToRoom); }}
+                >
+                  <Plus className="size-3.5" />
+                  নতুন ভাড়াটে
+                </Button>
+                {roomDetailData.currentTenants.length > 0 && (
+                  <AlertDialog open={vacateTenantOpen} onOpenChange={setVacateTenantOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs text-red-600 border-red-200 hover:bg-red-50">
+                        <LogOut className="size-3.5" />
+                        রুম ছাড়ুন
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="text-red-600">রুম ছাড়ার নিশ্চিতকরণ</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          কোন ভাড়াটে রুম ছাড়বেন তা নির্বাচন করুন:
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {roomDetailData.currentTenants.map((t) => (
+                          <button
+                            key={t.id}
+                            onClick={() => { setVacateTenantId(t.id); setVacateTenantName(t.name); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${vacateTenantId === t.id ? 'border-red-300 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                          >
+                            {t.name} {t.designation ? `— ${t.designation}` : ''}
+                          </button>
+                        ))}
+                      </div>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => { setVacateTenantId(""); setVacateTenantName(""); }}>বাতিল</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                          onClick={handleVacateTenant}
+                          disabled={!vacateTenantId || vacatingTenant}
+                        >
+                          {vacatingTenant ? "হচ্ছে..." : "রুম ছাড়ুন"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+              </div>
+            )}
+
+            {/* Add Tenant Form */}
+            {addTenantToRoom && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-3">
+                <h4 className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
+                  <UserCheck className="size-4" /> নতুন ভাড়াটে যোগ করুন
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">নাম *</Label>
+                    <Input className="h-8 text-sm" placeholder="ভাড়াটের নাম" value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">পদবি</Label>
+                    <Input className="h-8 text-sm" placeholder="পদবি" value={newTenantDesignation} onChange={(e) => setNewTenantDesignation(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">ফোন</Label>
+                    <Input className="h-8 text-sm" placeholder="ফোন নম্বর" value={newTenantPhone} onChange={(e) => setNewTenantPhone(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">যোগদানের তারিখ *</Label>
+                    <Input className="h-8 text-sm" type="date" value={newTenantStartDate} onChange={(e) => setNewTenantStartDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleAddTenantToRoom} disabled={addingTenantToRoom || !newTenantName.trim() || !newTenantStartDate}>
+                    {addingTenantToRoom ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setAddTenantToRoom(false)}>বাতিল</Button>
+                </div>
+              </div>
+            )}
 
             {roomDetailLoading ? (
               <div className="flex items-center justify-center py-10">
@@ -1236,7 +1395,7 @@ function BuildingsTab() {
       )}
 
       {/* Building Square Color Boxes Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4" style={{gridAutoFlow:'dense'}}>
         {buildings.map((building, bIdx) => {
           const totalRooms = building.floors?.reduce((sum, f) => sum + (f.rooms?.length || 0), 0) || 0;
           const totalEmptySeats = building.floors?.reduce((totalEmpty, f) => {
@@ -1249,16 +1408,16 @@ function BuildingsTab() {
           const totalTenants = building.floors?.reduce((total, f) => total + (f.rooms || []).reduce((t, r) => t + (r.tenants?.length || 0), 0), 0) || 0;
           const isExpanded = expandedBuildings.has(building.id);
 
-          // Square box color schemes — soft, eye-friendly standard colors
+          // Square box color schemes — soft muted pastel colors
           const boxColors = [
-            { base: 'bg-emerald-400/80', hover: 'hover:bg-emerald-500/90', ring: 'ring-emerald-300/70', text: 'text-emerald-50', detailBg: 'bg-emerald-50/80', detailBorder: 'border-emerald-200', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700', roomBorder: 'border-emerald-200', roomHover: 'hover:bg-emerald-50 hover:border-emerald-300' },
-            { base: 'bg-sky-400/80', hover: 'hover:bg-sky-500/90', ring: 'ring-sky-300/70', text: 'text-sky-50', detailBg: 'bg-sky-50/80', detailBorder: 'border-sky-200', iconBg: 'bg-sky-100', iconColor: 'text-sky-700', roomBorder: 'border-sky-200', roomHover: 'hover:bg-sky-50 hover:border-sky-300' },
-            { base: 'bg-violet-400/80', hover: 'hover:bg-violet-500/90', ring: 'ring-violet-300/70', text: 'text-violet-50', detailBg: 'bg-violet-50/80', detailBorder: 'border-violet-200', iconBg: 'bg-violet-100', iconColor: 'text-violet-700', roomBorder: 'border-violet-200', roomHover: 'hover:bg-violet-50 hover:border-violet-300' },
-            { base: 'bg-amber-400/80', hover: 'hover:bg-amber-500/90', ring: 'ring-amber-300/70', text: 'text-amber-50', detailBg: 'bg-amber-50/80', detailBorder: 'border-amber-200', iconBg: 'bg-amber-100', iconColor: 'text-amber-700', roomBorder: 'border-amber-200', roomHover: 'hover:bg-amber-50 hover:border-amber-300' },
-            { base: 'bg-rose-400/80', hover: 'hover:bg-rose-500/90', ring: 'ring-rose-300/70', text: 'text-rose-50', detailBg: 'bg-rose-50/80', detailBorder: 'border-rose-200', iconBg: 'bg-rose-100', iconColor: 'text-rose-700', roomBorder: 'border-rose-200', roomHover: 'hover:bg-rose-50 hover:border-rose-300' },
-            { base: 'bg-teal-400/80', hover: 'hover:bg-teal-500/90', ring: 'ring-teal-300/70', text: 'text-teal-50', detailBg: 'bg-teal-50/80', detailBorder: 'border-teal-200', iconBg: 'bg-teal-100', iconColor: 'text-teal-700', roomBorder: 'border-teal-200', roomHover: 'hover:bg-teal-50 hover:border-teal-300' },
-            { base: 'bg-indigo-400/80', hover: 'hover:bg-indigo-500/90', ring: 'ring-indigo-300/70', text: 'text-indigo-50', detailBg: 'bg-indigo-50/80', detailBorder: 'border-indigo-200', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700', roomBorder: 'border-indigo-200', roomHover: 'hover:bg-indigo-50 hover:border-indigo-300' },
-            { base: 'bg-orange-400/80', hover: 'hover:bg-orange-500/90', ring: 'ring-orange-300/70', text: 'text-orange-50', detailBg: 'bg-orange-50/80', detailBorder: 'border-orange-200', iconBg: 'bg-orange-100', iconColor: 'text-orange-700', roomBorder: 'border-orange-200', roomHover: 'hover:bg-orange-50 hover:border-orange-300' },
+            { base: 'bg-slate-300', hover: 'hover:bg-slate-400', ring: 'ring-slate-300', text: 'text-slate-700', detailBg: 'bg-slate-50', detailBorder: 'border-slate-200', iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+            { base: 'bg-stone-300', hover: 'hover:bg-stone-400', ring: 'ring-stone-300', text: 'text-stone-700', detailBg: 'bg-stone-50', detailBorder: 'border-stone-200', iconBg: 'bg-stone-100', iconColor: 'text-stone-600' },
+            { base: 'bg-cyan-200', hover: 'hover:bg-cyan-300', ring: 'ring-cyan-200', text: 'text-cyan-800', detailBg: 'bg-cyan-50', detailBorder: 'border-cyan-200', iconBg: 'bg-cyan-100', iconColor: 'text-cyan-700' },
+            { base: 'bg-sky-200', hover: 'hover:bg-sky-300', ring: 'ring-sky-200', text: 'text-sky-800', detailBg: 'bg-sky-50', detailBorder: 'border-sky-200', iconBg: 'bg-sky-100', iconColor: 'text-sky-700' },
+            { base: 'bg-indigo-200', hover: 'hover:bg-indigo-300', ring: 'ring-indigo-200', text: 'text-indigo-800', detailBg: 'bg-indigo-50', detailBorder: 'border-indigo-200', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700' },
+            { base: 'bg-violet-200', hover: 'hover:bg-violet-300', ring: 'ring-violet-200', text: 'text-violet-800', detailBg: 'bg-violet-50', detailBorder: 'border-violet-200', iconBg: 'bg-violet-100', iconColor: 'text-violet-700' },
+            { base: 'bg-teal-200', hover: 'hover:bg-teal-300', ring: 'ring-teal-200', text: 'text-teal-800', detailBg: 'bg-teal-50', detailBorder: 'border-teal-200', iconBg: 'bg-teal-100', iconColor: 'text-teal-700' },
+            { base: 'bg-emerald-200', hover: 'hover:bg-emerald-300', ring: 'ring-emerald-200', text: 'text-emerald-800', detailBg: 'bg-emerald-50', detailBorder: 'border-emerald-200', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700' },
           ];
           const clr = boxColors[bIdx % boxColors.length];
 
@@ -1267,7 +1426,7 @@ function BuildingsTab() {
               {/* Square Color Box */}
               <div
                 onClick={() => toggleBuilding(building.id)}
-                className={`aspect-square rounded-2xl ${clr.base} ${clr.hover} ${isExpanded ? `ring-4 ${clr.ring} shadow-lg scale-[0.97]` : 'shadow-md hover:shadow-lg hover:scale-[1.03]'} cursor-pointer transition-all duration-200 ease-in-out relative overflow-hidden`}
+                className={`aspect-square rounded-2xl ${clr.base} ${clr.hover} ${isExpanded ? `ring-4 ${clr.ring} shadow-lg scale-[0.97]` : 'shadow-md hover:shadow-lg hover:scale-[1.03]'} cursor-pointer transition-all duration-200 ease-in-out relative overflow-hidden max-w-[200px] mx-auto w-full`}
               >
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
@@ -1327,9 +1486,9 @@ function BuildingsTab() {
                 </div>
               </div>
 
-              {/* Expanded Building Details Panel — full width on desktop */}
+              {/* Expanded Building Details Panel — same layout on mobile & desktop */}
               {isExpanded && (
-                <div className={`mt-2 sm:mt-3 rounded-xl border ${clr.detailBorder} ${clr.detailBg} shadow-md overflow-hidden col-span-full`}>
+                <div className={`mt-2 sm:mt-3 rounded-xl border ${clr.detailBorder} ${clr.detailBg} shadow-md overflow-hidden col-span-full max-w-[420px] mx-auto w-full`}>
                   {/* Stats Bar */}
                   <div className="grid grid-cols-4 gap-0 px-2 py-2 sm:px-3 sm:py-2.5 border-b border-white/50">
                     <div className={`flex flex-col items-center ${clr.iconBg} rounded-lg py-1 sm:py-1.5`}>
@@ -1424,22 +1583,28 @@ function BuildingsTab() {
                           <p className="text-[10px] sm:text-xs text-muted-foreground pl-6 sm:pl-8">এই তলায় কোনো রুম নেই</p>
                         )}
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-2.5 pl-6 sm:pl-8">
-                          {floor.rooms?.map((room) => (
+                        <div className="grid grid-cols-3 gap-2 pl-6 sm:pl-8">
+                          {floor.rooms?.map((room) => {
+                            const tenantCount = room.tenants?.length || 0;
+                            const roomBg = tenantCount === 0 ? 'bg-white border-gray-200' : tenantCount === 1 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300';
+                            return (
                             <div
                               key={room.id}
-                              className={`relative flex flex-col items-center justify-center bg-white rounded-xl border ${clr.roomBorder} ${clr.roomHover} px-2 py-2.5 sm:px-3 sm:py-3 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.03] group/room`}
+                              className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-2 py-2.5 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
                               onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
                             >
-                              <BedDouble className={`size-4 sm:size-5 mb-1 ${clr.iconColor}`} />
+                              <BedDouble className={`size-4 sm:size-5 mb-1 ${tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
                               <span className="font-bold text-xs sm:text-sm text-gray-800">{room.roomNumber}</span>
-                              {room.tenants?.length > 0 ? (
-                                <span className="mt-1 flex items-center gap-1 text-[10px] sm:text-[11px] text-emerald-600 font-medium">
-                                  <Users className="size-2.5 sm:size-3" />
-                                  {toBanglaNumber(room.tenants.length)} জন
+                              {tenantCount === 0 ? (
+                                <span className="mt-1 text-[10px] sm:text-[11px] text-gray-400">খালি</span>
+                              ) : tenantCount === 1 ? (
+                                <span className="mt-1 flex items-center gap-0.5 text-[10px] sm:text-[11px] text-green-600 font-medium">
+                                  <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
                                 </span>
                               ) : (
-                                <span className="mt-1 text-[10px] sm:text-[11px] text-gray-400">খালি</span>
+                                <span className="mt-1 flex items-center gap-0.5 text-[10px] sm:text-[11px] text-red-600 font-medium">
+                                  <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
+                                </span>
                               )}
                               {/* Edit & Delete on hover */}
                               <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/room:opacity-100 transition-opacity">
@@ -1477,7 +1642,8 @@ function BuildingsTab() {
                                 </AlertDialog>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
