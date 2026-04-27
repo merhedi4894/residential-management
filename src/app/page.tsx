@@ -594,16 +594,16 @@ function MainTabs() {
         <TabErrorBoundary><BuildingsTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        <TabErrorBoundary><TenantsTab /></TabErrorBoundary>
+        {activeTab === "tenants" && <TabErrorBoundary><TenantsTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        <TabErrorBoundary><OverviewTab /></TabErrorBoundary>
+        {activeTab === "overview" && <TabErrorBoundary><OverviewTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        <TabErrorBoundary><TroublesTab /></TabErrorBoundary>
+        {activeTab === "troubles" && <TabErrorBoundary><TroublesTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="belongings" className="mt-6">
-        <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>
+        {activeTab === "belongings" && <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>}
       </TabsContent>
     </Tabs>
   );
@@ -4672,6 +4672,7 @@ function OverviewTab() {
   const [overviewSubTab, setOverviewSubTab] = useState<"tenants" | "inventory">("tenants");
   const [prevPage, setPrevPage] = useState(1);
   const prevPerPage = 5;
+  const [roomPrevPages, setRoomPrevPages] = useState<Record<string, number>>({});
 
   const [editTenantOpen, setEditTenantOpen] = useState(false);
   const [editTenantData, setEditTenantData] = useState<{ id: string; name: string; designation: string; phone: string; } | null>(null);
@@ -4846,16 +4847,31 @@ function OverviewTab() {
                         <div className="flex-1 min-w-0 text-sm"><span className="font-medium">{t.name}</span>{t.designation && <span className="text-muted-foreground ml-1.5">({t.designation})</span>}{t.phone && <span className="text-muted-foreground ml-2">{t.phone}</span>}<span className="text-muted-foreground text-xs ml-2">{formatDate(t.startDate)}</span></div>
                       </div>
                     )) : <p className="text-xs text-muted-foreground bg-gray-50 rounded px-2 py-1.5">কোনো ভাড়াটে নেই</p>}
-                    {roomData.previousTenants?.length > 0 && (
-                      <div className="mt-1"><span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({roomData.previousTenants.length})</span>
-                        {roomData.previousTenants.slice(0, 3).map((t: any) => (
-                          <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                            <span>{t.name}</span>{t.designation && <><span>•</span><span>{t.designation}</span></>}<span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
-                          </div>
-                        ))}
-                        {roomData.previousTenants.length > 3 && <p className="text-[10px] text-muted-foreground">...আরও {roomData.previousTenants.length - 3} জন</p>}
-                      </div>
-                    )}
+                    {roomData.previousTenants?.length > 0 && (() => {
+                      const allPrev = roomData.previousTenants;
+                      const prevTotalPages = Math.ceil(allPrev.length / 5);
+                      const prevP = roomPrevPages[roomData.roomId] || 1;
+                      const pagePrev = allPrev.slice((prevP - 1) * 5, prevP * 5);
+                      return (
+                        <div className="mt-1">
+                          <span className="text-[10px] font-semibold text-gray-500">পূর্বের ভাড়াটেগণ ({allPrev.length})</span>
+                          {pagePrev.map((t: any) => (
+                            <div key={t.id} className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <span>{t.name}</span>{t.designation && <><span>•</span><span>{t.designation}</span></>}<span>•</span><span>{formatDate(t.startDate)}{t.endDate ? ` — ${formatDate(t.endDate)}` : ""}</span>
+                            </div>
+                          ))}
+                          {prevTotalPages > 1 && (
+                            <div className="flex items-center justify-center gap-1 mt-1">
+                              <button className="text-[10px] px-1.5 py-0.5 border rounded disabled:opacity-50 hover:bg-gray-100" disabled={prevP <= 1} onClick={() => setRoomPrevPages(p => ({ ...p, [roomData.roomId]: prevP - 1 }))}>আগে</button>
+                              {Array.from({ length: prevTotalPages }, (_, i) => i + 1).map(p => (
+                                <button key={p} className={`text-[10px] w-5 h-5 border rounded ${p === prevP ? "bg-emerald-600 text-white border-emerald-600" : "hover:bg-gray-100"}`} onClick={() => setRoomPrevPages(p => ({ ...p, [roomData.roomId]: p }))}>{p}</button>
+                              ))}
+                              <button className="text-[10px] px-1.5 py-0.5 border rounded disabled:opacity-50 hover:bg-gray-100" disabled={prevP >= prevTotalPages} onClick={() => setRoomPrevPages(p => ({ ...p, [roomData.roomId]: prevP + 1 }))}>পরে</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
                 ))}
