@@ -155,10 +155,15 @@ interface Guest {
   mobile?: string;
   referredBy?: string;
   checkInDate: string;
+  checkInTime?: string;
   checkOutDate?: string;
+  checkOutTime?: string;
   totalBill?: string;
   note?: string;
   isPaid: boolean;
+  isBooked?: boolean;
+  roomId?: string;
+  roomNumber?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -249,7 +254,9 @@ const BuildingsContext = React.createContext<{
   buildings: Building[];
   reloadBuildings: () => void;
   counts: { buildingCount: number; roomCount: number; tenantCount: number };
-}>({ buildings: [], reloadBuildings: () => {}, counts: { buildingCount: 0, roomCount: 0, tenantCount: 0 } });
+  bookedRoomIds: Set<string>;
+  reloadBookedRooms: () => void;
+}>({ buildings: [], reloadBuildings: () => {}, counts: { buildingCount: 0, roomCount: 0, tenantCount: 0 }, bookedRoomIds: new Set(), reloadBookedRooms: () => {} });
 
 function useBuildingsContext() {
   return React.useContext(BuildingsContext);
@@ -257,6 +264,7 @@ function useBuildingsContext() {
 
 function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
   const [buildings, setBuildings] = useState<Building[]>([]);
+  const [bookedRoomIds, setBookedRoomIds] = useState<Set<string>>(new Set());
 
   const loadBuildings = useCallback(async () => {
     try {
@@ -264,6 +272,21 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
       if (!res.ok) throw new Error();
       const data = await res.json();
       setBuildings(data);
+    } catch { /* silent */ }
+  }, []);
+
+  // Load rooms that have active guest bookings (isBooked=true)
+  const loadBookedRooms = useCallback(async () => {
+    try {
+      const res = await fetch("/api/guests?active=true");
+      if (res.ok) {
+        const activeGuests = await res.json();
+        const ids = new Set<string>();
+        for (const g of activeGuests) {
+          if (g.roomId && g.isBooked) ids.add(g.roomId);
+        }
+        setBookedRoomIds(ids);
+      }
     } catch { /* silent */ }
   }, []);
 
@@ -284,13 +307,17 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     loadBuildings();
-    const handler = () => { loadBuildings(); };
+    const handler = () => { loadBuildings(); loadBookedRooms(); };
     window.addEventListener("dashboard-data-changed", handler);
     return () => window.removeEventListener("dashboard-data-changed", handler);
   }, [loadBuildings]);
 
+  useEffect(() => {
+    loadBookedRooms();
+  }, [loadBookedRooms]);
+
   return (
-    <BuildingsContext.Provider value={React.useMemo(() => ({ buildings, reloadBuildings: loadBuildings, counts }), [buildings, loadBuildings, counts])}>
+    <BuildingsContext.Provider value={React.useMemo(() => ({ buildings, reloadBuildings: loadBuildings, counts, bookedRoomIds, reloadBookedRooms: loadBookedRooms }), [buildings, loadBuildings, counts, bookedRoomIds, loadBookedRooms])}>
       {children}
     </BuildingsContext.Provider>
   );
@@ -589,7 +616,7 @@ function MainTabs() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BuildingsTab() {
-  const { buildings, reloadBuildings } = useBuildingsContext();
+  const { buildings, reloadBuildings, bookedRoomIds, reloadBookedRooms } = useBuildingsContext();
   const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(
     new Set()
   );
@@ -1208,7 +1235,8 @@ function BuildingsTab() {
   const refreshData = useCallback(() => {
     window.dispatchEvent(new Event("dashboard-data-changed"));
     reloadBuildings();
-  }, [reloadBuildings]);
+    reloadBookedRooms();
+  }, [reloadBuildings, reloadBookedRooms]);
 
   const toggleBuilding = (id: string) => {
     setExpandedBuildings((prev) => {
@@ -2366,16 +2394,28 @@ function BuildingsTab() {
                         <div className="grid grid-cols-3 gap-2 pl-6">
                           {floor.rooms?.map((room) => {
                             const tenantCount = room.tenants?.length || 0;
-                            const roomBg = tenantCount === 0 ? 'bg-white border-gray-300' : tenantCount === 1 ? 'bg-green-100 border-green-400 ring-1 ring-green-300' : 'bg-red-100 border-red-400 ring-1 ring-red-300';
+                            const hasGuestBooking = bookedRoomIds.has(room.id);
+                            let roomBg = 'bg-white border-gray-300';
+                            if (hasGuestBooking) {
+                              roomBg = 'bg-red-100 border-red-400 ring-1 ring-red-300';
+                            } else if (tenantCount === 1) {
+                              roomBg = 'bg-green-100 border-green-400 ring-1 ring-green-300';
+                            } else if (tenantCount >= 2) {
+                              roomBg = 'bg-red-100 border-red-400 ring-1 ring-red-300';
+                            }
                             return (
                             <div
                               key={room.id}
                               className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
                               onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
                             >
-                              <BedDouble className={`size-4 mb-1 ${tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
+                              <BedDouble className={`size-4 mb-1 ${hasGuestBooking ? 'text-red-600' : tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
                               <span className="font-bold text-xs text-gray-800">{room.roomNumber}</span>
-                              {tenantCount === 0 ? (
+                              {hasGuestBooking ? (
+                                <span className="mt-1 flex items-center gap-0.5 text-[10px] text-red-600 font-medium">
+                                  <UserCheck className="size-2.5" />গেস্ট বুক
+                                </span>
+                              ) : tenantCount === 0 ? (
                                 <span className="mt-1 text-[10px] text-gray-400">খালি</span>
                               ) : tenantCount === 1 ? (
                                 <span className="mt-1 flex items-center gap-0.5 text-[10px] text-green-600 font-medium">
@@ -4856,21 +4896,24 @@ function GuestsTab() {
               <div className={`size-2 rounded-full shrink-0 ${guest.isPaid ? "bg-emerald-500" : "bg-orange-500"}`} />
               <span className="font-medium text-xs truncate min-w-0 flex-1">{guest.name}</span>
               {guest.mobile && <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden sm:inline"><Phone className="size-2.5 inline mr-0.5 -mt-px" />{guest.mobile}</span>}
+              {guest.roomNumber && <span className="text-[10px] text-purple-600 font-medium whitespace-nowrap"><BedDouble className="size-2.5 inline mr-0.5 -mt-px" />{guest.roomNumber}</span>}
               {guest.referredBy && <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden md:inline">রেফার: {guest.referredBy}</span>}
+              {guest.isBooked && <span className="text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 bg-red-50 text-red-700 border-red-200">বুক</span>}
               <span className={`text-[9px] px-1.5 py-0.5 rounded-full border shrink-0 ${guest.isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>{guest.isPaid ? "Paid" : "Non Paid"}</span>
             </div>
             {expandedGuestId === guest.id && (
               <div className="bg-gray-50/80 border-t px-3 py-3 space-y-3 animate-in slide-in-from-top-1 duration-200">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">নাম</p><p className="font-medium">{guest.name}</p></div>
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">মোবাইল</p><p className="font-medium">{guest.mobile || "—"}</p></div>
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">Refered By</p><p className="font-medium">{guest.referredBy || "—"}</p></div>
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">স্ট্যাটাস</p><p className="font-medium"><span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${guest.isPaid ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>{guest.isPaid ? "Paid" : "Non Paid"}</span></p></div>
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">ঠিকানা</p><p className="font-medium">{guest.address || "—"}</p></div>
-                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-ইন</p><p className="font-medium">{formatDate(guest.checkInDate)}</p></div>
-                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-আউট</p><p className="font-medium">{guest.checkOutDate ? formatDate(guest.checkOutDate) : "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-ইন</p><p className="font-medium">{formatDate(guest.checkInDate)}{guest.checkInTime ? <span className="text-blue-600 ml-1">{guest.checkInTime}</span> : null}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">চেক-আউট</p><p className="font-medium">{guest.checkOutDate ? <>{formatDate(guest.checkOutDate)}{guest.checkOutTime ? <span className="text-blue-600 ml-1">{guest.checkOutTime}</span> : null}</> : "—"}</p></div>
+                  <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">রুম নম্বর</p><p className="font-medium">{guest.roomNumber ? <span className="text-purple-700 font-semibold">রুম: {guest.roomNumber}</span> : "—"}</p></div>
                   <div className="space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">মোট বিল</p><p className="font-medium">{guest.totalBill || "—"}</p></div>
-                  {guest.note && <div className="col-span-2 sm:col-span-4 space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">নোট</p><p className="font-medium">{guest.note}</p></div>}
+                  {guest.note && <div className="col-span-2 sm:col-span-5 space-y-0.5"><p className="text-[9px] text-muted-foreground uppercase">নোট</p><p className="font-medium">{guest.note}</p></div>}
                 </div>
                 <div className="flex gap-2 pt-1">
                   <Button variant="outline" size="sm" className="gap-1.5 h-7 text-[11px] px-3 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); openEdit(guest); }}><Edit3 className="size-3" />এডিট</Button>
