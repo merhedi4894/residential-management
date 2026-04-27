@@ -551,24 +551,10 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
 
 function MainTabs() {
   const [activeTab, setActiveTab] = useState("buildings");
-  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["buildings"]));
-  // Cross-tab: room detail → full tenant add form
-  const [pendingRoomForTenant, setPendingRoomForTenant] = useState<{
-    buildingId: string; floorId: string; roomId: string; roomNumber: string
-  } | null>(null);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
-    setVisitedTabs(prev => new Set([...prev, value]));
   };
-
-  // Pre-load all tabs in background after 2s so switching is instant
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisitedTabs(new Set(["buildings", "tenants", "overview", "troubles", "belongings"]));
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, []);
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -605,19 +591,19 @@ function MainTabs() {
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">
-        <TabErrorBoundary><BuildingsTab onRoomAddTenant={(data) => { setPendingRoomForTenant(data); setVisitedTabs(prev => new Set([...prev, "tenants"])); setActiveTab("tenants"); }} /></TabErrorBoundary>
+        <TabErrorBoundary><BuildingsTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        {visitedTabs.has("tenants") && <TabErrorBoundary><TenantsTab pendingRoomForTenant={pendingRoomForTenant} onRoomHandled={() => setPendingRoomForTenant(null)} /></TabErrorBoundary>}
+        <TabErrorBoundary><TenantsTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        {visitedTabs.has("overview") && <TabErrorBoundary><OverviewTab /></TabErrorBoundary>}
+        <TabErrorBoundary><OverviewTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        {visitedTabs.has("troubles") && <TabErrorBoundary><TroublesTab /></TabErrorBoundary>}
+        <TabErrorBoundary><TroublesTab /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="belongings" className="mt-6">
-        {visitedTabs.has("belongings") && <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>}
+        <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>
       </TabsContent>
     </Tabs>
   );
@@ -627,7 +613,7 @@ function MainTabs() {
 // TAB 1 — Buildings & Rooms
 // ═══════════════════════════════════════════════════════════════════════════
 
-function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingId: string; floorId: string; roomId: string; roomNumber: string }) => void }) {
+function BuildingsTab() {
   const { buildings, reloadBuildings, bookedRoomIds, reloadBookedRooms } = useBuildingsContext();
   const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(
     new Set()
@@ -778,6 +764,133 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
   const [deleteInvIdInRoom, setDeleteInvIdInRoom] = useState("");
   const [deleteInvNameInRoom, setDeleteInvNameInRoom] = useState("");
   const [deletingInvInRoom, setDeletingInvInRoom] = useState(false);
+
+  // Full tenant add dialog (same as TenantsTab form) — triggered from room detail
+  const [fullTenantDialogOpen, setFullTenantDialogOpen] = useState(false);
+  const [ftBuildingId, setFtBuildingId] = useState("");
+  const [ftFloorId, setFtFloorId] = useState("");
+  const [ftRoomId, setFtRoomId] = useState("");
+  const [ftRoomNumber, setFtRoomNumber] = useState("");
+  const [ftName, setFtName] = useState("");
+  const [ftDesignation, setFtDesignation] = useState("");
+  const [ftPhone, setFtPhone] = useState("");
+  const [ftStartDate, setFtStartDate] = useState("");
+  const [ftShowTenant2, setFtShowTenant2] = useState(false);
+  const [ft2Name, setFt2Name] = useState("");
+  const [ft2Designation, setFt2Designation] = useState("");
+  const [ft2Phone, setFt2Phone] = useState("");
+  const [ft2StartDate, setFt2StartDate] = useState("");
+  const [ftInvItems, setFtInvItems] = useState<{ itemName: string; quantity: string; condition: string }[]>([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+  const [ftEditingInvIdx, setFtEditingInvIdx] = useState<number | null>(null);
+  const [ftAddingTenant, setFtAddingTenant] = useState(false);
+  const [ftPreviousTenantName, setFtPreviousTenantName] = useState("");
+  const [ftLoadingPrevItems, setFtLoadingPrevItems] = useState(false);
+  const [ftLoadingCommonItems, setFtLoadingCommonItems] = useState(false);
+
+  const ftSelectedBuilding = buildings.find((b) => b.id === ftBuildingId);
+  const ftSelectedFloor = ftSelectedBuilding?.floors?.find((f) => f.id === ftFloorId);
+
+  const openFullTenantDialog = () => {
+    if (!roomDetailData) return;
+    let foundBuildingId = "";
+    let foundFloorId = "";
+    for (const b of buildings) {
+      for (const f of b.floors || []) {
+        for (const r of f.rooms || []) {
+          if (r.id === roomDetailData.roomId) {
+            foundBuildingId = b.id;
+            foundFloorId = f.id;
+          }
+        }
+      }
+    }
+    setFtBuildingId(foundBuildingId);
+    setFtFloorId(foundFloorId);
+    setFtRoomId(roomDetailData.roomId);
+    setFtRoomNumber(roomDetailData.roomNumber);
+    setFtName("");
+    setFtDesignation("");
+    setFtPhone("");
+    setFtStartDate(new Date().toISOString().split('T')[0]);
+    setFtShowTenant2(false);
+    setFt2Name("");
+    setFt2Designation("");
+    setFt2Phone("");
+    setFt2StartDate("");
+    setFtInvItems([{ itemName: "", quantity: "1", condition: "ভালো" }]);
+    setFtEditingInvIdx(null);
+    setFtPreviousTenantName("");
+    setFullTenantDialogOpen(true);
+    // Load previous inventory
+    if (roomDetailData.roomId) {
+      setFtLoadingPrevItems(true);
+      fetch(`/api/inventory?roomId=${roomDetailData.roomId}&lastTenant=true`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && !Array.isArray(data) && data.items && data.items.length > 0) {
+            setFtInvItems(data.items.map((item: { itemName: string; quantity: number; condition: string }) => ({
+              itemName: item.itemName, quantity: String(item.quantity), condition: item.condition
+            })));
+            setFtPreviousTenantName(data.tenantName || "");
+          }
+        }).catch(() => {}).finally(() => setFtLoadingPrevItems(false));
+    }
+    // Close room detail
+    setRoomDetailOpen(false);
+    setRoomDetailData(null);
+  };
+
+  const handleFullTenantAdd = async () => {
+    if (!ftName.trim() || !ftRoomId || !ftStartDate) {
+      toast.error("নাম, রুম এবং শুরুর তারিখ দিন");
+      return;
+    }
+    if (ftShowTenant2 && !ft2Name.trim()) {
+      toast.error("২য় ভাড়াটের নাম দিন");
+      return;
+    }
+    setFtAddingTenant(true);
+    try {
+      const res1 = await fetch("/api/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: ftName.trim(),
+          designation: ftDesignation.trim() || null,
+          phone: ftPhone.trim() || null,
+          roomId: ftRoomId,
+          roomNumber: ftRoomNumber,
+          startDate: ftStartDate,
+          inventoryItems: ftInvItems.filter(i => i.itemName.trim()),
+        }),
+      });
+      if (!res1.ok) throw new Error();
+      if (ftShowTenant2 && ft2Name.trim()) {
+        const res2 = await fetch("/api/tenants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: ft2Name.trim(),
+            designation: ft2Designation.trim() || null,
+            phone: ft2Phone.trim() || null,
+            roomId: ftRoomId,
+            roomNumber: ftRoomNumber,
+            startDate: ft2StartDate || ftStartDate,
+            inventoryItems: ftInvItems.filter(i => i.itemName.trim()),
+            skipDeactivate: true,
+          }),
+        });
+        if (!res2.ok) throw new Error();
+      }
+      toast.success(ftShowTenant2 ? "দুইজন ভাড়াটে যোগ হয়েছে" : "ভাড়াটে যোগ হয়েছে");
+      setFullTenantDialogOpen(false);
+      refreshData();
+    } catch {
+      toast.error("ভাড়াটে যোগ করতে সমস্যা হয়েছে");
+    } finally {
+      setFtAddingTenant(false);
+    }
+  };
 
   const handleAddTenantToRoom = async () => {
     if (!newTenantName.trim() || !newTenantStartDate || !roomDetailData?.roomId) {
@@ -1594,28 +1707,7 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
                 <Button
                   size="sm"
                   className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => {
-                    // Find building and floor info for this room
-                    let foundBuildingId = "";
-                    let foundFloorId = "";
-                    for (const b of buildings) {
-                      for (const f of b.floors || []) {
-                        for (const r of f.rooms || []) {
-                          if (r.id === roomDetailData?.roomId) {
-                            foundBuildingId = b.id;
-                            foundFloorId = f.id;
-                          }
-                        }
-                      }
-                    }
-                    if (foundBuildingId && foundFloorId) {
-                      onRoomAddTenant({ buildingId: foundBuildingId, floorId: foundFloorId, roomId: roomDetailData.roomId, roomNumber: roomDetailData.roomNumber });
-                    }
-                    setRoomDetailOpen(false);
-                    setRoomDetailData(null);
-                    setAddTenantToRoom(false);
-                    setAddGuestToRoom(false);
-                  }}
+                  onClick={openFullTenantDialog}
                 >
                   <Plus className="size-3.5" />
                   নতুন ভাড়াটে
@@ -2507,6 +2599,158 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
           );
         })}
       </div>
+
+      {/* Full Tenant Add Dialog — same form as TenantsTab */}
+      <Dialog open={fullTenantDialogOpen} onOpenChange={(open) => { if (!open) setFullTenantDialogOpen(false); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>নতুন ভাড়াটে যোগ করুন</DialogTitle>
+            <DialogDescription>ভাড়াটে এর তথ্য এবং কমন মালামালের তালিকা দিন</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Room selection cascade */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>বিল্ডিং নির্বাচন</Label>
+                <Select value={ftBuildingId} onValueChange={(v) => { setFtBuildingId(v); setFtFloorId(""); setFtRoomId(""); }}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="বিল্ডিং বেছে নিন" /></SelectTrigger>
+                  <SelectContent>{buildings.map((b) => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>তলা নির্বাচন</Label>
+                <Select value={ftFloorId} onValueChange={(v) => { setFtFloorId(v); setFtRoomId(""); }} disabled={!ftBuildingId}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="তলা বেছে নিন" /></SelectTrigger>
+                  <SelectContent>{ftSelectedBuilding?.floors?.map((f) => (<SelectItem key={f.id} value={f.id}>{f.floorNumber} তলা</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>রুম নির্বাচন</Label>
+                <Select value={ftRoomId} onValueChange={(v) => { setFtRoomId(v); const rm = ftSelectedFloor?.rooms?.find(r => r.id === v); if (rm) setFtRoomNumber(rm.roomNumber); }} disabled={!ftFloorId}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="রুম বেছে নিন" /></SelectTrigger>
+                  <SelectContent>{ftSelectedFloor?.rooms?.map((r) => (<SelectItem key={r.id} value={r.id}>{r.roomNumber}{(r.tenants?.length || 0) >= (ftSelectedBuilding?.capacityPerRoom || 1) && " (ভর্তি)"}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Tenant 1 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2"><Users className="size-4 text-emerald-600" /><span className="font-medium text-sm">১ম ভাড়াটে</span></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5"><Label>নাম *</Label><Input placeholder="ভাড়াটে এর নাম" value={ftName} onChange={(e) => setFtName(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>পদবী</Label><Input placeholder="যেমন: ছাত্র, চাকরিজীবী" value={ftDesignation} onChange={(e) => setFtDesignation(e.target.value)} /></div>
+                <div className="space-y-1.5"><Label>ফোন নম্বর</Label><Input placeholder="০১XXXXXXXXX" value={ftPhone} onChange={(e) => setFtPhone(e.target.value)} /></div>
+              </div>
+              <div className="space-y-1.5"><Label>শুরুর তারিখ *</Label><Input type="date" value={ftStartDate} onChange={(e) => setFtStartDate(e.target.value)} /></div>
+            </div>
+
+            {/* Add 2nd tenant */}
+            <div className="flex items-center justify-between border-t pt-3">
+              <span className="text-sm text-muted-foreground">একই রুমে আরেকজন ভাড়াটে থাকবেন?</span>
+              <Button type="button" variant={ftShowTenant2 ? "default" : "outline"} size="sm" className={ftShowTenant2 ? "bg-emerald-600 hover:bg-emerald-700 text-white gap-1" : "gap-1"} onClick={() => setFtShowTenant2(!ftShowTenant2)}>
+                <Plus className="size-3" />{ftShowTenant2 ? "২য় ভাড়াটে সরান" : "২য় ভাড়াটে যোগ"}
+              </Button>
+            </div>
+            {ftShowTenant2 && (
+              <div className="space-y-3 bg-blue-50/50 border border-blue-100 rounded-lg p-4">
+                <div className="flex items-center gap-2"><Users className="size-4 text-blue-600" /><span className="font-medium text-sm">২য় ভাড়াটে</span></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5"><Label>নাম *</Label><Input placeholder="২য় ভাড়াটে এর নাম" value={ft2Name} onChange={(e) => setFt2Name(e.target.value)} /></div>
+                  <div className="space-y-1.5"><Label>পদবী</Label><Input placeholder="যেমন: ছাত্র, চাকরিজীবী" value={ft2Designation} onChange={(e) => setFt2Designation(e.target.value)} /></div>
+                  <div className="space-y-1.5"><Label>ফোন নম্বর</Label><Input placeholder="০১XXXXXXXXX" value={ft2Phone} onChange={(e) => setFt2Phone(e.target.value)} /></div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>শুরুর তারিখ</Label><Input type="date" value={ft2StartDate} onChange={(e) => setFt2StartDate(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">খালি রাখলে ১ম ভাড়াটে এর তারিখ ব্যবহার হবে</p>
+                </div>
+              </div>
+            )}
+
+            {/* Inventory items */}
+            <div className="space-y-3">
+              {ftPreviousTenantName && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <Package className="size-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-800">আগের মালামাল অটো লোড হয়েছে</p>
+                      <p className="text-xs text-blue-600 mt-0.5">&quot;{ftPreviousTenantName}&quot; এর মালামালের তালিকা নিচে দেওয়া হয়েছে।</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <Label>কমন মালামাল</Label>
+                <div className="flex gap-2">
+                  {ftBuildingId && (
+                    <Button variant="outline" size="sm" className="gap-1 text-xs border-emerald-300 text-emerald-600 hover:bg-emerald-50" disabled={ftLoadingCommonItems} onClick={async () => {
+                      setFtLoadingCommonItems(true);
+                      try {
+                        const r = await fetch(`/api/belongings?buildingId=${ftBuildingId}`);
+                        if (r.ok) {
+                          const data = await r.json();
+                          if (Array.isArray(data) && data.length > 0) {
+                            setFtInvItems(data.map((item: { itemName: string; quantity: number }) => ({ itemName: item.itemName, quantity: String(item.quantity), condition: "ভালো" })));
+                            toast.success(`${toBanglaNumber(data.length)} টি কমন মালামাল লোড হয়েছে`);
+                          } else { toast.error("এই বিল্ডিংয়ে কোনো কমন মালামাল নেই"); }
+                        }
+                      } catch { toast.error("কমন মালামাল লোড করতে সমস্যা"); } finally { setFtLoadingCommonItems(false); }
+                    }}>
+                      {ftLoadingCommonItems ? <div className="size-3 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" /> : <Package className="size-3" />}
+                      কমন মালামাল থেকে লোড
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={() => setFtInvItems(prev => [...prev, { itemName: "", quantity: "1", condition: "ভালো" }])}>
+                    <Plus className="size-3" />আইটেম যোগ
+                  </Button>
+                </div>
+              </div>
+              {ftLoadingPrevItems && (
+                <div className="flex items-center justify-center py-4">
+                  <div className="size-5 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+                  <span className="text-sm text-muted-foreground ml-2">আগের মালামাল লোড হচ্ছে...</span>
+                </div>
+              )}
+              {!ftLoadingPrevItems && (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {ftInvItems.map((item, idx) => (
+                    <div key={idx} className="grid gap-2 items-end grid-cols-[1fr_80px_100px_32px_32px]">
+                      {ftEditingInvIdx === idx ? (
+                        <>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">মালামালের নাম</span>}<Input placeholder="নাম" value={item.itemName} onChange={(e) => setFtInvItems(prev => prev.map((it, i) => i === idx ? { ...it, itemName: e.target.value } : it))} /></div>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">পরিমাণ</span>}<Input placeholder="১" value={item.quantity} onChange={(e) => setFtInvItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: e.target.value } : it))} /></div>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">অবস্থা</span>}
+                            <Select value={item.condition} onValueChange={(v) => setFtInvItems(prev => prev.map((it, i) => i === idx ? { ...it, condition: v } : it))}>
+                              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent><SelectItem value="ভালো">ভালো</SelectItem><SelectItem value="মাঝারি">মাঝারি</SelectItem><SelectItem value="খারাপ">খারাপ</SelectItem><SelectItem value="নস্ট">নস্ট</SelectItem></SelectContent>
+                            </Select>
+                          </div>
+                          <Button variant="ghost" size="sm" className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-100 size-8 p-0" onClick={() => setFtEditingInvIdx(null)}><Edit3 className="size-4" /></Button>
+                          <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0" onClick={() => setFtInvItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)}><X className="size-4" /></Button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">মালামালের নাম</span>}<div className="flex items-center h-9 px-3 rounded-md border bg-white text-sm">{item.itemName || <span className="text-muted-foreground">নাম</span>}</div></div>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">পরিমাণ</span>}<div className="flex items-center h-9 px-3 rounded-md border bg-white text-sm">{item.quantity}</div></div>
+                          <div className="space-y-1">{idx === 0 && <span className="text-xs text-muted-foreground">অবস্থা</span>}<div className="flex items-center h-9 px-3 rounded-md border bg-white">{getConditionBadge(item.condition)}</div></div>
+                          <Button variant="ghost" size="sm" className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 size-8 p-0" onClick={() => setFtEditingInvIdx(idx)}><Edit3 className="size-4" /></Button>
+                          <Button variant="ghost" size="sm" className="text-red-400 hover:text-red-600 hover:bg-red-50 size-8 p-0" onClick={() => setFtInvItems(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)}><X className="size-4" /></Button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFullTenantDialogOpen(false)}>বাতিল</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleFullTenantAdd} disabled={ftAddingTenant || !ftName.trim() || !ftRoomId || !ftStartDate}>
+              {ftAddingTenant ? "যোগ হচ্ছে..." : "ভাড়াটে যোগ করুন"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2515,7 +2759,7 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
 // TAB 2 — Tenant Management
 // ═══════════════════════════════════════════════════════════════════════════
 
-function TenantsTab({ pendingRoomForTenant, onRoomHandled }: { pendingRoomForTenant: { buildingId: string; floorId: string; roomId: string; roomNumber: string } | null; onRoomHandled: () => void }) {
+function TenantsTab() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const { buildings } = useBuildingsContext();
   const [loading, setLoading] = useState(true);
@@ -2602,20 +2846,6 @@ function TenantsTab({ pendingRoomForTenant, onRoomHandled }: { pendingRoomForTen
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  // When room box clicked from BuildingsTab, pre-fill add tenant form
-  useEffect(() => {
-    if (pendingRoomForTenant) {
-      resetAddForm();
-      setTBuildingId(pendingRoomForTenant.buildingId);
-      setTFloorId(pendingRoomForTenant.floorId);
-      setTRoomId(pendingRoomForTenant.roomId);
-      setTRoomNumber(pendingRoomForTenant.roomNumber);
-      setAddOpen(true);
-      setAddDialogTab("add");
-      onRoomHandled();
-    }
-  }, [pendingRoomForTenant]);
 
   const selectedBuilding = buildings.find((b) => b.id === tBuildingId);
   const selectedFloor = selectedBuilding?.floors?.find(
