@@ -551,14 +551,24 @@ function DashboardHeader({ user, onLogout, onChangePassword }: {
 
 function MainTabs() {
   const [activeTab, setActiveTab] = useState("buildings");
-  // Cross-tab communication: when user clicks a room box to add tenant
+  const [visitedTabs, setVisitedTabs] = useState<Set<string>>(new Set(["buildings"]));
+  // Cross-tab: room detail → full tenant add form
   const [pendingRoomForTenant, setPendingRoomForTenant] = useState<{
     buildingId: string; floorId: string; roomId: string; roomNumber: string
   } | null>(null);
 
   const handleTabChange = (value: string) => {
     setActiveTab(value);
+    setVisitedTabs(prev => new Set([...prev, value]));
   };
+
+  // Pre-load all tabs in background after 2s so switching is instant
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setVisitedTabs(new Set(["buildings", "tenants", "overview", "troubles", "belongings"]));
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -595,19 +605,19 @@ function MainTabs() {
       </TabsList>
 
       <TabsContent value="buildings" className="mt-6">
-        <TabErrorBoundary><BuildingsTab onRoomAddTenant={(data) => { setPendingRoomForTenant(data); setActiveTab("tenants"); }} /></TabErrorBoundary>
+        <TabErrorBoundary><BuildingsTab onRoomAddTenant={(data) => { setPendingRoomForTenant(data); setVisitedTabs(prev => new Set([...prev, "tenants"])); setActiveTab("tenants"); }} /></TabErrorBoundary>
       </TabsContent>
       <TabsContent value="tenants" className="mt-6">
-        <TabErrorBoundary><TenantsTab pendingRoomForTenant={pendingRoomForTenant} onRoomHandled={() => setPendingRoomForTenant(null)} /></TabErrorBoundary>
+        {visitedTabs.has("tenants") && <TabErrorBoundary><TenantsTab pendingRoomForTenant={pendingRoomForTenant} onRoomHandled={() => setPendingRoomForTenant(null)} /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="overview" className="mt-6">
-        <TabErrorBoundary><OverviewTab /></TabErrorBoundary>
+        {visitedTabs.has("overview") && <TabErrorBoundary><OverviewTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="troubles" className="mt-6">
-        <TabErrorBoundary><TroublesTab /></TabErrorBoundary>
+        {visitedTabs.has("troubles") && <TabErrorBoundary><TroublesTab /></TabErrorBoundary>}
       </TabsContent>
       <TabsContent value="belongings" className="mt-6">
-        <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>
+        {visitedTabs.has("belongings") && <TabErrorBoundary><BelongingsTab /></TabErrorBoundary>}
       </TabsContent>
     </Tabs>
   );
@@ -1584,7 +1594,28 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
                 <Button
                   size="sm"
                   className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => { setNewTenantStartDate(new Date().toISOString().split('T')[0]); setAddTenantToRoom(!addTenantToRoom); }}
+                  onClick={() => {
+                    // Find building and floor info for this room
+                    let foundBuildingId = "";
+                    let foundFloorId = "";
+                    for (const b of buildings) {
+                      for (const f of b.floors || []) {
+                        for (const r of f.rooms || []) {
+                          if (r.id === roomDetailData?.roomId) {
+                            foundBuildingId = b.id;
+                            foundFloorId = f.id;
+                          }
+                        }
+                      }
+                    }
+                    if (foundBuildingId && foundFloorId) {
+                      onRoomAddTenant({ buildingId: foundBuildingId, floorId: foundFloorId, roomId: roomDetailData.roomId, roomNumber: roomDetailData.roomNumber });
+                    }
+                    setRoomDetailOpen(false);
+                    setRoomDetailData(null);
+                    setAddTenantToRoom(false);
+                    setAddGuestToRoom(false);
+                  }}
                 >
                   <Plus className="size-3.5" />
                   নতুন ভাড়াটে
@@ -2409,9 +2440,7 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
                             <div
                               key={room.id}
                               className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
-                              onClick={() => {
-                                onRoomAddTenant({ buildingId: building.id, floorId: floor.id, roomId: room.id, roomNumber: room.roomNumber });
-                              }}
+                              onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
                             >
                               <BedDouble className={`size-4 mb-1 ${hasGuestBooking ? 'text-red-600' : tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
                               <span className="font-bold text-xs text-gray-800">{room.roomNumber}</span>
@@ -2430,15 +2459,8 @@ function BuildingsTab({ onRoomAddTenant }: { onRoomAddTenant: (data: { buildingI
                                   <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
                                 </span>
                               )}
-                              {/* View Details, Edit & Delete on hover */}
+                              {/* Edit & Delete on hover */}
                               <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/room:opacity-100 transition-opacity">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openRoomDetailDialog(room.id, room.roomNumber, building.name); }}
-                                  className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-gray-500 hover:bg-gray-100 transition-colors"
-                                  title="রুমের বিস্তারিত"
-                                >
-                                  <Eye className="size-2.5" />
-                                </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openEditRoomDialog(room.id, room.roomNumber); }}
                                   className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-blue-500 hover:bg-blue-50 transition-colors"
