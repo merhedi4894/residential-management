@@ -657,6 +657,47 @@ function BuildingsTab() {
   const [vacateTenantName, setVacateTenantName] = useState("");
   const [vacatingTenant, setVacatingTenant] = useState(false);
 
+  // Guest form from room detail dialog
+  const [addGuestToRoom, setAddGuestToRoom] = useState(false);
+  const [guestName, setGuestName] = useState("");
+  const [guestMobile, setGuestMobile] = useState("");
+  const [guestAddress, setGuestAddress] = useState("");
+  const [guestReferredBy, setGuestReferredBy] = useState("");
+  const [guestCheckInDate, setGuestCheckInDate] = useState("");
+  const [guestCheckOutDate, setGuestCheckOutDate] = useState("");
+  const [guestTotalBill, setGuestTotalBill] = useState("");
+  const [guestNote, setGuestNote] = useState("");
+  const [addingGuest, setAddingGuest] = useState(false);
+
+  // Edit tenant from room detail dialog
+  const [editTenantInRoom, setEditTenantInRoom] = useState(false);
+  const [editTenantIdInRoom, setEditTenantIdInRoom] = useState("");
+  const [editTenantNameInRoom, setEditTenantNameInRoom] = useState("");
+  const [editTenantDesigInRoom, setEditTenantDesigInRoom] = useState("");
+  const [editTenantPhoneInRoom, setEditTenantPhoneInRoom] = useState("");
+  const [savingTenantEditInRoom, setSavingTenantEditInRoom] = useState(false);
+
+  // Delete tenant from room detail dialog
+  const [deleteTenantInRoomOpen, setDeleteTenantInRoomOpen] = useState(false);
+  const [deleteTenantInRoomId, setDeleteTenantInRoomId] = useState("");
+  const [deleteTenantInRoomName, setDeleteTenantInRoomName] = useState("");
+  const [deletingTenantInRoom, setDeletingTenantInRoom] = useState(false);
+
+  // Edit inventory from room detail dialog
+  const [editInvInRoom, setEditInvInRoom] = useState(false);
+  const [editInvIdInRoom, setEditInvIdInRoom] = useState("");
+  const [editInvItemName, setEditInvItemName] = useState("");
+  const [editInvQuantity, setEditInvQuantity] = useState("");
+  const [editInvCondition, setEditInvCondition] = useState("ভালো");
+  const [editInvNote, setEditInvNote] = useState("");
+  const [savingInvEditInRoom, setSavingInvEditInRoom] = useState(false);
+
+  // Delete inventory from room detail dialog
+  const [deleteInvInRoomOpen, setDeleteInvInRoomOpen] = useState(false);
+  const [deleteInvIdInRoom, setDeleteInvIdInRoom] = useState("");
+  const [deleteInvNameInRoom, setDeleteInvNameInRoom] = useState("");
+  const [deletingInvInRoom, setDeletingInvInRoom] = useState(false);
+
   const handleAddTenantToRoom = async () => {
     if (!newTenantName.trim() || !newTenantStartDate || !roomDetailData?.roomId) {
       toast.error("নাম ও যোগদানের তারিখ দিন");
@@ -713,6 +754,175 @@ function BuildingsTab() {
       toast.error("রুম ছাড়াতে সমস্যা হয়েছে");
     } finally {
       setVacatingTenant(false);
+    }
+  };
+
+  const handleAddGuestToRoom = async () => {
+    if (!guestName.trim() || !guestCheckInDate) {
+      toast.error("গেস্টের নাম ও চেক-ইন তারিখ দিন");
+      return;
+    }
+    setAddingGuest(true);
+    try {
+      const res = await fetch("/api/guests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: guestName.trim(),
+          mobile: guestMobile.trim(),
+          address: guestAddress.trim(),
+          referredBy: guestReferredBy.trim(),
+          checkInDate: guestCheckInDate,
+          checkOutDate: guestCheckOutDate || null,
+          totalBill: guestTotalBill.trim(),
+          note: guestNote.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("গেস্ট যোগ হয়েছে");
+      setGuestName("");
+      setGuestMobile("");
+      setGuestAddress("");
+      setGuestReferredBy("");
+      setGuestCheckInDate("");
+      setGuestCheckOutDate("");
+      setGuestTotalBill("");
+      setGuestNote("");
+      setAddGuestToRoom(false);
+    } catch {
+      toast.error("গেস্ট যোগ করতে সমস্যা হয়েছে");
+    } finally {
+      setAddingGuest(false);
+    }
+  };
+
+  const openEditTenantInRoom = (t: { id: string; name: string; designation: string | null; phone: string | null }) => {
+    setEditTenantIdInRoom(t.id);
+    setEditTenantNameInRoom(t.name);
+    setEditTenantDesigInRoom(t.designation || "");
+    setEditTenantPhoneInRoom(t.phone || "");
+    setEditTenantInRoom(true);
+  };
+
+  const handleSaveTenantEditInRoom = async () => {
+    if (!editTenantNameInRoom.trim() || !editTenantIdInRoom) return;
+    setSavingTenantEditInRoom(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editTenantIdInRoom,
+          action: "updateInfo",
+          name: editTenantNameInRoom.trim(),
+          designation: editTenantDesigInRoom.trim(),
+          phone: editTenantPhoneInRoom.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("ভাড়াটের তথ্য আপডেট হয়েছে");
+      setEditTenantInRoom(false);
+      if (roomDetailData) {
+        openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+      }
+    } catch {
+      toast.error("আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setSavingTenantEditInRoom(false);
+    }
+  };
+
+  const openDeleteTenantInRoom = (t: { id: string; name: string }) => {
+    setDeleteTenantInRoomId(t.id);
+    setDeleteTenantInRoomName(t.name);
+    setDeleteTenantInRoomOpen(true);
+  };
+
+  const handleDeleteTenantInRoom = async () => {
+    if (!deleteTenantInRoomId) return;
+    setDeletingTenantInRoom(true);
+    try {
+      const res = await fetch("/api/tenants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteTenantInRoomId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${deleteTenantInRoomName} মুছে ফেলা হয়েছে`);
+      setDeleteTenantInRoomOpen(false);
+      refreshData();
+      if (roomDetailData) {
+        openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+      }
+    } catch {
+      toast.error("মুছে ফেলতে সমস্যা হয়েছে");
+    } finally {
+      setDeletingTenantInRoom(false);
+    }
+  };
+
+  const openEditInvInRoom = (item: { id: string; itemName: string; quantity: number; condition: string; note: string | null }) => {
+    setEditInvIdInRoom(item.id);
+    setEditInvItemName(item.itemName);
+    setEditInvQuantity(String(item.quantity));
+    setEditInvCondition(item.condition);
+    setEditInvNote(item.note || "");
+    setEditInvInRoom(true);
+  };
+
+  const handleSaveInvEditInRoom = async () => {
+    if (!editInvItemName.trim() || !editInvIdInRoom) return;
+    setSavingInvEditInRoom(true);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editInvIdInRoom,
+          itemName: editInvItemName.trim(),
+          quantity: editInvQuantity,
+          condition: editInvCondition,
+          note: editInvNote.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("মালামাল আপডেট হয়েছে");
+      setEditInvInRoom(false);
+      if (roomDetailData) {
+        openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+      }
+    } catch {
+      toast.error("আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setSavingInvEditInRoom(false);
+    }
+  };
+
+  const openDeleteInvInRoom = (item: { id: string; itemName: string }) => {
+    setDeleteInvIdInRoom(item.id);
+    setDeleteInvNameInRoom(item.itemName);
+    setDeleteInvInRoomOpen(true);
+  };
+
+  const handleDeleteInvInRoom = async () => {
+    if (!deleteInvIdInRoom) return;
+    setDeletingInvInRoom(true);
+    try {
+      const res = await fetch("/api/inventory", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteInvIdInRoom }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${deleteInvNameInRoom} মুছে ফেলা হয়েছে`);
+      setDeleteInvInRoomOpen(false);
+      if (roomDetailData) {
+        openRoomDetailDialog(roomDetailData.roomId, roomDetailData.roomNumber, roomDetailData.buildingName);
+      }
+    } catch {
+      toast.error("মুছে ফেলতে সমস্যা হয়েছে");
+    } finally {
+      setDeletingInvInRoom(false);
     }
   };
 
@@ -1138,7 +1348,7 @@ function BuildingsTab() {
         </Dialog>
 
         {/* Room Detail Dialog — Tenant & Belongings Info */}
-        <Dialog open={roomDetailOpen} onOpenChange={(open) => { setRoomDetailOpen(open); if (!open) { setRoomDetailData(null); setAddTenantToRoom(false); } }}>
+        <Dialog open={roomDetailOpen} onOpenChange={(open) => { setRoomDetailOpen(open); if (!open) { setRoomDetailData(null); setAddTenantToRoom(false); setAddGuestToRoom(false); } }}>
           <DialogContent className="max-w-lg sm:max-w-xl max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1161,6 +1371,15 @@ function BuildingsTab() {
                 >
                   <Plus className="size-3.5" />
                   নতুন ভাড়াটে
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
+                  onClick={() => { setGuestCheckInDate(new Date().toISOString().split('T')[0]); setAddGuestToRoom(!addGuestToRoom); }}
+                >
+                  <UserCheck className="size-3.5" />
+                  গেস্ট
                 </Button>
                 {roomDetailData.currentTenants.length > 0 && (
                   <AlertDialog open={vacateTenantOpen} onOpenChange={setVacateTenantOpen}>
@@ -1237,6 +1456,55 @@ function BuildingsTab() {
               </div>
             )}
 
+            {/* Add Guest Form */}
+            {addGuestToRoom && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
+                <h4 className="text-sm font-semibold text-blue-800 flex items-center gap-1.5">
+                  <UserCheck className="size-4" /> গেস্ট যোগ করুন
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">নাম *</Label>
+                    <Input className="h-8 text-sm" placeholder="গেস্টের নাম" value={guestName} onChange={(e) => setGuestName(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">ফোন</Label>
+                    <Input className="h-8 text-sm" placeholder="ফোন নম্বর" value={guestMobile} onChange={(e) => setGuestMobile(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">ঠিকানা</Label>
+                    <Input className="h-8 text-sm" placeholder="ঠিকানা" value={guestAddress} onChange={(e) => setGuestAddress(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">রেফার করেছেন</Label>
+                    <Input className="h-8 text-sm" placeholder="রেফারার" value={guestReferredBy} onChange={(e) => setGuestReferredBy(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">চেক-ইন তারিখ *</Label>
+                    <Input className="h-8 text-sm" type="date" value={guestCheckInDate} onChange={(e) => setGuestCheckInDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">চেক-আউট তারিখ</Label>
+                    <Input className="h-8 text-sm" type="date" value={guestCheckOutDate} onChange={(e) => setGuestCheckOutDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">বিল</Label>
+                    <Input className="h-8 text-sm" placeholder="মোট বিল" value={guestTotalBill} onChange={(e) => setGuestTotalBill(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">নোট</Label>
+                    <Input className="h-8 text-sm" placeholder="নোট" value={guestNote} onChange={(e) => setGuestNote(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={handleAddGuestToRoom} disabled={addingGuest || !guestName.trim() || !guestCheckInDate}>
+                    {addingGuest ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setAddGuestToRoom(false)}>বাতিল</Button>
+                </div>
+              </div>
+            )}
+
             {roomDetailLoading ? (
               <div className="flex items-center justify-center py-10">
                 <div className="size-6 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
@@ -1270,7 +1538,14 @@ function BuildingsTab() {
                               যোগদান: {formatDate(t.startDate)}
                             </p>
                           </div>
-                          <UserCheck className="size-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                          <div className="flex gap-1 flex-shrink-0">
+                            <button onClick={() => openEditTenantInRoom(t)} className="size-6 rounded-md bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center">
+                              <Edit3 className="size-3" />
+                            </button>
+                            <button onClick={() => openDeleteTenantInRoom(t)} className="size-6 rounded-md bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center">
+                              <Trash2 className="size-3" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1292,6 +1567,7 @@ function BuildingsTab() {
                             <TableHead className="text-xs h-8">জিনিস</TableHead>
                             <TableHead className="text-xs h-8 text-center">পরিমাণ</TableHead>
                             <TableHead className="text-xs h-8 text-center">অবস্থা</TableHead>
+                            <TableHead className="text-xs h-8 text-center">অ্যাকশন</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1303,6 +1579,16 @@ function BuildingsTab() {
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${item.condition === 'ভালো' ? 'bg-emerald-100 text-emerald-700' : item.condition === 'মাঝারি' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                                   {item.condition}
                                 </span>
+                              </TableCell>
+                              <TableCell className="py-1.5 text-center">
+                                <div className="flex justify-center gap-1">
+                                  <button onClick={() => openEditInvInRoom(item)} className="size-5 rounded bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center">
+                                    <Edit3 className="size-2.5" />
+                                  </button>
+                                  <button onClick={() => openDeleteInvInRoom(item)} className="size-5 rounded bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center">
+                                    <Trash2 className="size-2.5" />
+                                  </button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1383,6 +1669,119 @@ function BuildingsTab() {
             ) : null}
           </DialogContent>
         </Dialog>
+
+        {/* Edit Tenant in Room Dialog */}
+        <Dialog open={editTenantInRoom} onOpenChange={setEditTenantInRoom}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <Edit3 className="size-5" />
+                ভাড়াটের তথ্য সম্পাদনা
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">নাম</Label>
+                <Input className="h-8 text-sm" value={editTenantNameInRoom} onChange={(e) => setEditTenantNameInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">পদবি</Label>
+                <Input className="h-8 text-sm" value={editTenantDesigInRoom} onChange={(e) => setEditTenantDesigInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">ফোন</Label>
+                <Input className="h-8 text-sm" value={editTenantPhoneInRoom} onChange={(e) => setEditTenantPhoneInRoom(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setEditTenantInRoom(false)}>বাতিল</Button>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveTenantEditInRoom} disabled={savingTenantEditInRoom || !editTenantNameInRoom.trim()}>
+                {savingTenantEditInRoom ? "হচ্ছে..." : "আপডেট করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Tenant Confirm Dialog */}
+        <AlertDialog open={deleteTenantInRoomOpen} onOpenChange={setDeleteTenantInRoomOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600">ভাড়াটে মুছে ফেলবেন?</AlertDialogTitle>
+              <AlertDialogDescription>
+                &quot;{deleteTenantInRoomName}&quot; এর সকল তথ্য স্থায়ীভাবে মুছে যাবে।
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>বাতিল</AlertDialogCancel>
+              <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteTenantInRoom} disabled={deletingTenantInRoom}>
+                {deletingTenantInRoom ? "হচ্ছে..." : "মুছে ফেলুন"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Edit Inventory Dialog */}
+        <Dialog open={editInvInRoom} onOpenChange={setEditInvInRoom}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <Edit3 className="size-5" />
+                মালামাল সম্পাদনা
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">জিনিসের নাম</Label>
+                <Input className="h-8 text-sm" value={editInvItemName} onChange={(e) => setEditInvItemName(e.target.value)} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">পরিমাণ</Label>
+                  <Input className="h-8 text-sm" type="number" min={1} value={editInvQuantity} onChange={(e) => setEditInvQuantity(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">অবস্থা</Label>
+                  <Select value={editInvCondition} onValueChange={setEditInvCondition}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ভালো">ভালো</SelectItem>
+                      <SelectItem value="মাঝারি">মাঝারি</SelectItem>
+                      <SelectItem value="খারাপ">খারাপ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">নোট</Label>
+                <Input className="h-8 text-sm" value={editInvNote} onChange={(e) => setEditInvNote(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setEditInvInRoom(false)}>বাতিল</Button>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveInvEditInRoom} disabled={savingInvEditInRoom || !editInvItemName.trim()}>
+                {savingInvEditInRoom ? "হচ্ছে..." : "আপডেট করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Inventory Confirm Dialog */}
+        <AlertDialog open={deleteInvInRoomOpen} onOpenChange={setDeleteInvInRoomOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600">মালামাল মুছে ফেলবেন?</AlertDialogTitle>
+              <AlertDialogDescription>
+                &quot;{deleteInvNameInRoom}&quot; স্থায়ীভাবে মুছে যাবে।
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>বাতিল</AlertDialogCancel>
+              <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteInvInRoom} disabled={deletingInvInRoom}>
+                {deletingInvInRoom ? "হচ্ছে..." : "মুছে ফেলুন"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {buildings.length === 0 && (
@@ -1395,7 +1794,7 @@ function BuildingsTab() {
       )}
 
       {/* Building Square Color Boxes Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4" style={{gridAutoFlow:'dense'}}>
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4" style={{gridAutoFlow:'dense'}}>
         {buildings.map((building, bIdx) => {
           const totalRooms = building.floors?.reduce((sum, f) => sum + (f.rooms?.length || 0), 0) || 0;
           const totalEmptySeats = building.floors?.reduce((totalEmpty, f) => {
@@ -1410,14 +1809,14 @@ function BuildingsTab() {
 
           // Square box color schemes — soft muted pastel colors
           const boxColors = [
-            { base: 'bg-slate-300', hover: 'hover:bg-slate-400', ring: 'ring-slate-300', text: 'text-slate-700', detailBg: 'bg-slate-50', detailBorder: 'border-slate-200', iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
-            { base: 'bg-stone-300', hover: 'hover:bg-stone-400', ring: 'ring-stone-300', text: 'text-stone-700', detailBg: 'bg-stone-50', detailBorder: 'border-stone-200', iconBg: 'bg-stone-100', iconColor: 'text-stone-600' },
-            { base: 'bg-cyan-200', hover: 'hover:bg-cyan-300', ring: 'ring-cyan-200', text: 'text-cyan-800', detailBg: 'bg-cyan-50', detailBorder: 'border-cyan-200', iconBg: 'bg-cyan-100', iconColor: 'text-cyan-700' },
-            { base: 'bg-sky-200', hover: 'hover:bg-sky-300', ring: 'ring-sky-200', text: 'text-sky-800', detailBg: 'bg-sky-50', detailBorder: 'border-sky-200', iconBg: 'bg-sky-100', iconColor: 'text-sky-700' },
-            { base: 'bg-indigo-200', hover: 'hover:bg-indigo-300', ring: 'ring-indigo-200', text: 'text-indigo-800', detailBg: 'bg-indigo-50', detailBorder: 'border-indigo-200', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700' },
-            { base: 'bg-violet-200', hover: 'hover:bg-violet-300', ring: 'ring-violet-200', text: 'text-violet-800', detailBg: 'bg-violet-50', detailBorder: 'border-violet-200', iconBg: 'bg-violet-100', iconColor: 'text-violet-700' },
-            { base: 'bg-teal-200', hover: 'hover:bg-teal-300', ring: 'ring-teal-200', text: 'text-teal-800', detailBg: 'bg-teal-50', detailBorder: 'border-teal-200', iconBg: 'bg-teal-100', iconColor: 'text-teal-700' },
-            { base: 'bg-emerald-200', hover: 'hover:bg-emerald-300', ring: 'ring-emerald-200', text: 'text-emerald-800', detailBg: 'bg-emerald-50', detailBorder: 'border-emerald-200', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700' },
+            { base: 'bg-slate-600', hover: 'hover:bg-slate-700', ring: 'ring-slate-400', text: 'text-white', detailBg: 'bg-slate-50', detailBorder: 'border-slate-200', iconBg: 'bg-slate-100', iconColor: 'text-slate-600' },
+            { base: 'bg-stone-600', hover: 'hover:bg-stone-700', ring: 'ring-stone-400', text: 'text-white', detailBg: 'bg-stone-50', detailBorder: 'border-stone-200', iconBg: 'bg-stone-100', iconColor: 'text-stone-600' },
+            { base: 'bg-cyan-600', hover: 'hover:bg-cyan-700', ring: 'ring-cyan-400', text: 'text-white', detailBg: 'bg-cyan-50', detailBorder: 'border-cyan-200', iconBg: 'bg-cyan-100', iconColor: 'text-cyan-700' },
+            { base: 'bg-sky-600', hover: 'hover:bg-sky-700', ring: 'ring-sky-400', text: 'text-white', detailBg: 'bg-sky-50', detailBorder: 'border-sky-200', iconBg: 'bg-sky-100', iconColor: 'text-sky-700' },
+            { base: 'bg-indigo-600', hover: 'hover:bg-indigo-700', ring: 'ring-indigo-400', text: 'text-white', detailBg: 'bg-indigo-50', detailBorder: 'border-indigo-200', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700' },
+            { base: 'bg-violet-600', hover: 'hover:bg-violet-700', ring: 'ring-violet-400', text: 'text-white', detailBg: 'bg-violet-50', detailBorder: 'border-violet-200', iconBg: 'bg-violet-100', iconColor: 'text-violet-700' },
+            { base: 'bg-teal-600', hover: 'hover:bg-teal-700', ring: 'ring-teal-400', text: 'text-white', detailBg: 'bg-teal-50', detailBorder: 'border-teal-200', iconBg: 'bg-teal-100', iconColor: 'text-teal-700' },
+            { base: 'bg-emerald-600', hover: 'hover:bg-emerald-700', ring: 'ring-emerald-400', text: 'text-white', detailBg: 'bg-emerald-50', detailBorder: 'border-emerald-200', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700' },
           ];
           const clr = boxColors[bIdx % boxColors.length];
 
@@ -1426,7 +1825,7 @@ function BuildingsTab() {
               {/* Square Color Box */}
               <div
                 onClick={() => toggleBuilding(building.id)}
-                className={`aspect-square rounded-2xl ${clr.base} ${clr.hover} ${isExpanded ? `ring-4 ${clr.ring} shadow-lg scale-[0.97]` : 'shadow-md hover:shadow-lg hover:scale-[1.03]'} cursor-pointer transition-all duration-200 ease-in-out relative overflow-hidden max-w-[200px] mx-auto w-full`}
+                className={`aspect-square rounded-2xl ${clr.base} ${clr.hover} ${isExpanded ? `ring-4 ${clr.ring} shadow-lg scale-[0.97]` : 'shadow-md hover:shadow-lg hover:scale-[1.03]'} cursor-pointer transition-all duration-200 ease-in-out relative overflow-hidden max-w-[240px] mx-auto w-full`}
               >
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
@@ -1583,14 +1982,14 @@ function BuildingsTab() {
                           <p className="text-[10px] sm:text-xs text-muted-foreground pl-6 sm:pl-8">এই তলায় কোনো রুম নেই</p>
                         )}
 
-                        <div className="grid grid-cols-3 gap-2 pl-6 sm:pl-8">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 pl-6 sm:pl-8">
                           {floor.rooms?.map((room) => {
                             const tenantCount = room.tenants?.length || 0;
-                            const roomBg = tenantCount === 0 ? 'bg-white border-gray-200' : tenantCount === 1 ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300';
+                            const roomBg = tenantCount === 0 ? 'bg-white border-gray-300' : tenantCount === 1 ? 'bg-green-100 border-green-400 ring-1 ring-green-300' : 'bg-red-100 border-red-400 ring-1 ring-red-300';
                             return (
                             <div
                               key={room.id}
-                              className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-2 py-2.5 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
+                              className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 sm:px-4 sm:py-4 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
                               onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
                             >
                               <BedDouble className={`size-4 sm:size-5 mb-1 ${tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
