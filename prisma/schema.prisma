@@ -135,16 +135,21 @@ model BelongingTemplate {
 
 // Guest management
 model Guest {
-  id           String    @id @default(cuid())
-  name         String
-  address      String?
-  mobile       String?
-  referredBy   String?
-  checkInDate  DateTime
-  checkOutDate DateTime?
-  totalBill    String?
-  note         String?
-  isPaid       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  address       String?
+  mobile        String?
+  referredBy    String?
+  checkInDate   DateTime
+  checkInTime   String?
+  checkOutDate  DateTime?
+  checkOutTime  String?
+  totalBill     String?
+  note          String?
+  isPaid        Boolean   @default(true)
+  isBooked      Boolean   @default(false)
+  roomId        String?
+  roomNumber    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }

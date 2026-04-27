@@ -669,6 +669,46 @@ function BuildingsTab() {
   const [guestNote, setGuestNote] = useState("");
   const [addingGuest, setAddingGuest] = useState(false);
 
+  // Guest time fields
+  const [guestCheckInTime, setGuestCheckInTime] = useState("");
+  const [guestCheckOutTime, setGuestCheckOutTime] = useState("");
+
+  // Current guests for this room
+  const [currentGuestsInRoom, setCurrentGuestsInRoom] = useState<{
+    id: string; name: string; mobile: string | null; address: string | null; referredBy: string | null;
+    checkInDate: string; checkInTime: string | null; checkOutDate: string | null; checkOutTime: string | null;
+    totalBill: string | null; note: string | null; isPaid: boolean; isBooked: boolean;
+  }[]>([]);
+
+  // Edit guest dialog
+  const [editGuestInRoom, setEditGuestInRoom] = useState(false);
+  const [editGuestIdInRoom, setEditGuestIdInRoom] = useState("");
+  const [editGuestNameInRoom, setEditGuestNameInRoom] = useState("");
+  const [editGuestMobileInRoom, setEditGuestMobileInRoom] = useState("");
+  const [editGuestAddressInRoom, setEditGuestAddressInRoom] = useState("");
+  const [editGuestReferredByInRoom, setEditGuestReferredByInRoom] = useState("");
+  const [editGuestCheckInDateInRoom, setEditGuestCheckInDateInRoom] = useState("");
+  const [editGuestCheckInTimeInRoom, setEditGuestCheckInTimeInRoom] = useState("");
+  const [editGuestCheckOutDateInRoom, setEditGuestCheckOutDateInRoom] = useState("");
+  const [editGuestCheckOutTimeInRoom, setEditGuestCheckOutTimeInRoom] = useState("");
+  const [editGuestTotalBillInRoom, setEditGuestTotalBillInRoom] = useState("");
+  const [editGuestNoteInRoom, setEditGuestNoteInRoom] = useState("");
+  const [savingGuestEditInRoom, setSavingGuestEditInRoom] = useState(false);
+
+  // Delete guest confirm dialog
+  const [deleteGuestInRoomOpen, setDeleteGuestInRoomOpen] = useState(false);
+  const [deleteGuestIdInRoom, setDeleteGuestIdInRoom] = useState("");
+  const [deleteGuestNameInRoom, setDeleteGuestNameInRoom] = useState("");
+  const [deletingGuestInRoom, setDeletingGuestInRoom] = useState(false);
+
+  // Vacate guest (room checkout) dialog
+  const [vacateGuestInRoomOpen, setVacateGuestInRoomOpen] = useState(false);
+  const [vacateGuestIdInRoom, setVacateGuestIdInRoom] = useState("");
+  const [vacateGuestNameInRoom, setVacateGuestNameInRoom] = useState("");
+  const [vacateCheckOutDate, setVacateCheckOutDate] = useState("");
+  const [vacateCheckOutTime, setVacateCheckOutTime] = useState("");
+  const [vacatingGuestInRoom, setVacatingGuestInRoom] = useState(false);
+
   // Edit tenant from room detail dialog
   const [editTenantInRoom, setEditTenantInRoom] = useState(false);
   const [editTenantIdInRoom, setEditTenantIdInRoom] = useState("");
@@ -758,13 +798,25 @@ function BuildingsTab() {
     }
   };
 
+  const loadCurrentGuestsForRoom = async (roomId: string) => {
+    try {
+      const res = await fetch(`/api/guests?roomId=${roomId}&active=true`);
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentGuestsInRoom(data);
+      }
+    } catch { /* silent */ }
+  };
+
   const handleAddGuestToRoom = async () => {
-    if (!guestName.trim() || !guestCheckInDate) {
+    if (!guestName.trim() || !guestCheckInDate || !roomDetailData?.roomId) {
       toast.error("গেস্টের নাম ও চেক-ইন তারিখ দিন");
       return;
     }
     setAddingGuest(true);
     try {
+      const checkInDateTime = guestCheckInTime ? `${guestCheckInDate}T${guestCheckInTime}` : guestCheckInDate;
+      const checkOutDateTime = guestCheckOutDate ? (guestCheckOutTime ? `${guestCheckOutDate}T${guestCheckOutTime}` : guestCheckOutDate) : null;
       const res = await fetch("/api/guests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -773,27 +825,154 @@ function BuildingsTab() {
           mobile: guestMobile.trim(),
           address: guestAddress.trim(),
           referredBy: guestReferredBy.trim(),
-          checkInDate: guestCheckInDate,
-          checkOutDate: guestCheckOutDate || null,
+          checkInDate: checkInDateTime,
+          checkInTime: guestCheckInTime.trim() || null,
+          checkOutDate: checkOutDateTime,
+          checkOutTime: guestCheckOutTime.trim() || null,
           totalBill: guestTotalBill.trim(),
           note: guestNote.trim(),
+          roomId: roomDetailData.roomId,
+          roomNumber: roomDetailData.roomNumber,
+          isBooked: true,
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success("গেস্ট যোগ হয়েছে");
+      toast.success("গেস্ট বুক হয়েছে");
       setGuestName("");
       setGuestMobile("");
       setGuestAddress("");
       setGuestReferredBy("");
       setGuestCheckInDate("");
+      setGuestCheckInTime("");
       setGuestCheckOutDate("");
+      setGuestCheckOutTime("");
       setGuestTotalBill("");
       setGuestNote("");
       setAddGuestToRoom(false);
+      loadCurrentGuestsForRoom(roomDetailData.roomId);
+      refreshData();
     } catch {
       toast.error("গেস্ট যোগ করতে সমস্যা হয়েছে");
     } finally {
       setAddingGuest(false);
+    }
+  };
+
+  const openEditGuestInRoom = (g: typeof currentGuestsInRoom[0]) => {
+    setEditGuestIdInRoom(g.id);
+    setEditGuestNameInRoom(g.name);
+    setEditGuestMobileInRoom(g.mobile || "");
+    setEditGuestAddressInRoom(g.address || "");
+    setEditGuestReferredByInRoom(g.referredBy || "");
+    setEditGuestCheckInDateInRoom(g.checkInDate?.split('T')[0] || "");
+    setEditGuestCheckInTimeInRoom(g.checkInTime || "");
+    setEditGuestCheckOutDateInRoom(g.checkOutDate?.split('T')[0] || "");
+    setEditGuestCheckOutTimeInRoom(g.checkOutTime || "");
+    setEditGuestTotalBillInRoom(g.totalBill || "");
+    setEditGuestNoteInRoom(g.note || "");
+    setEditGuestInRoom(true);
+  };
+
+  const handleSaveGuestEditInRoom = async () => {
+    if (!editGuestNameInRoom.trim() || !editGuestIdInRoom) return;
+    setSavingGuestEditInRoom(true);
+    try {
+      const checkInDateTime = editGuestCheckInTimeInRoom ? `${editGuestCheckInDateInRoom}T${editGuestCheckInTimeInRoom}` : editGuestCheckInDateInRoom;
+      const checkOutDateTime = editGuestCheckOutDateInRoom ? (editGuestCheckOutTimeInRoom ? `${editGuestCheckOutDateInRoom}T${editGuestCheckOutTimeInRoom}` : editGuestCheckOutDateInRoom) : null;
+      const res = await fetch("/api/guests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editGuestIdInRoom,
+          name: editGuestNameInRoom.trim(),
+          mobile: editGuestMobileInRoom.trim(),
+          address: editGuestAddressInRoom.trim(),
+          referredBy: editGuestReferredByInRoom.trim(),
+          checkInDate: checkInDateTime,
+          checkInTime: editGuestCheckInTimeInRoom.trim() || null,
+          checkOutDate: checkOutDateTime,
+          checkOutTime: editGuestCheckOutTimeInRoom.trim() || null,
+          totalBill: editGuestTotalBillInRoom.trim(),
+          note: editGuestNoteInRoom.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("গেস্ট তথ্য আপডেট হয়েছে");
+      setEditGuestInRoom(false);
+      if (roomDetailData) {
+        loadCurrentGuestsForRoom(roomDetailData.roomId);
+      }
+    } catch {
+      toast.error("আপডেট করতে সমস্যা হয়েছে");
+    } finally {
+      setSavingGuestEditInRoom(false);
+    }
+  };
+
+  const openDeleteGuestInRoom = (g: typeof currentGuestsInRoom[0]) => {
+    setDeleteGuestIdInRoom(g.id);
+    setDeleteGuestNameInRoom(g.name);
+    setDeleteGuestInRoomOpen(true);
+  };
+
+  const handleDeleteGuestInRoom = async () => {
+    if (!deleteGuestIdInRoom) return;
+    setDeletingGuestInRoom(true);
+    try {
+      const res = await fetch("/api/guests", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteGuestIdInRoom }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${deleteGuestNameInRoom} মুছে ফেলা হয়েছে`);
+      setDeleteGuestInRoomOpen(false);
+      if (roomDetailData) {
+        loadCurrentGuestsForRoom(roomDetailData.roomId);
+      }
+      refreshData();
+    } catch {
+      toast.error("মুছে ফেলতে সমস্যা হয়েছে");
+    } finally {
+      setDeletingGuestInRoom(false);
+    }
+  };
+
+  const openVacateGuestInRoom = (g: typeof currentGuestsInRoom[0]) => {
+    setVacateGuestIdInRoom(g.id);
+    setVacateGuestNameInRoom(g.name);
+    const now = new Date();
+    setVacateCheckOutDate(now.toISOString().split('T')[0]);
+    setVacateCheckOutTime(now.toTimeString().slice(0, 5));
+    setVacateGuestInRoomOpen(true);
+  };
+
+  const handleVacateGuestInRoom = async () => {
+    if (!vacateGuestIdInRoom || !vacateCheckOutDate) return;
+    setVacatingGuestInRoom(true);
+    try {
+      const checkOutDateTime = vacateCheckOutTime ? `${vacateCheckOutDate}T${vacateCheckOutTime}` : vacateCheckOutDate;
+      const res = await fetch("/api/guests", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: vacateGuestIdInRoom,
+          checkOutDate: checkOutDateTime,
+          checkOutTime: vacateCheckOutTime.trim() || null,
+          isBooked: false,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`${vacateGuestNameInRoom} রুম খালি করা হয়েছে`);
+      setVacateGuestInRoomOpen(false);
+      if (roomDetailData) {
+        loadCurrentGuestsForRoom(roomDetailData.roomId);
+      }
+      refreshData();
+    } catch {
+      toast.error("রুম খালি করতে সমস্যা হয়েছে");
+    } finally {
+      setVacatingGuestInRoom(false);
     }
   };
 
@@ -949,6 +1128,7 @@ function BuildingsTab() {
       toast.error("রুমের তথ্য লোড করতে সমস্যা হয়েছে");
     } finally {
       setRoomDetailLoading(false);
+      loadCurrentGuestsForRoom(roomId);
     }
   };
 
@@ -1375,12 +1555,16 @@ function BuildingsTab() {
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
-                  onClick={() => { setGuestCheckInDate(new Date().toISOString().split('T')[0]); setAddGuestToRoom(!addGuestToRoom); }}
+                  className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={() => {
+                    const now = new Date();
+                    setGuestCheckInDate(now.toISOString().split('T')[0]);
+                    setGuestCheckInTime(now.toTimeString().slice(0, 5));
+                    setAddGuestToRoom(!addGuestToRoom);
+                  }}
                 >
-                  <UserCheck className="size-3.5" />
-                  গেস্ট
+                  <Plus className="size-3.5" />
+                  নতুন গেস্ট
                 </Button>
                 {roomDetailData.currentTenants.length > 0 && (
                   <AlertDialog open={vacateTenantOpen} onOpenChange={setVacateTenantOpen}>
@@ -1461,7 +1645,7 @@ function BuildingsTab() {
             {addGuestToRoom && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-3">
                 <h4 className="text-sm font-semibold text-blue-800 flex items-center gap-1.5">
-                  <UserCheck className="size-4" /> গেস্ট যোগ করুন
+                  <Plus className="size-4" /> নতুন গেস্ট বুকিং
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -1485,8 +1669,16 @@ function BuildingsTab() {
                     <Input className="h-8 text-sm" type="date" value={guestCheckInDate} onChange={(e) => setGuestCheckInDate(e.target.value)} />
                   </div>
                   <div className="space-y-1">
+                    <Label className="text-xs">চেক-ইন সময়</Label>
+                    <Input className="h-8 text-sm" type="time" value={guestCheckInTime} onChange={(e) => setGuestCheckInTime(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
                     <Label className="text-xs">চেক-আউট তারিখ</Label>
                     <Input className="h-8 text-sm" type="date" value={guestCheckOutDate} onChange={(e) => setGuestCheckOutDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">চেক-আউট সময়</Label>
+                    <Input className="h-8 text-sm" type="time" value={guestCheckOutTime} onChange={(e) => setGuestCheckOutTime(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">বিল</Label>
@@ -1499,9 +1691,57 @@ function BuildingsTab() {
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" className="text-xs bg-blue-600 hover:bg-blue-700 text-white" onClick={handleAddGuestToRoom} disabled={addingGuest || !guestName.trim() || !guestCheckInDate}>
-                    {addingGuest ? "যোগ হচ্ছে..." : "যোগ করুন"}
+                    {addingGuest ? "হচ্ছে..." : "বুক করুন"}
                   </Button>
                   <Button size="sm" variant="outline" className="text-xs" onClick={() => setAddGuestToRoom(false)}>বাতিল</Button>
+                </div>
+              </div>
+            )}
+
+            {/* Current Guests in Room */}
+            {!roomDetailLoading && currentGuestsInRoom.length > 0 && (
+              <div>
+                <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
+                  <UserCheck className="size-4 text-blue-600" />
+                  বুক করা গেস্ট
+                  <Badge className="bg-blue-100 text-blue-700 text-[10px]">{toBanglaNumber(currentGuestsInRoom.length)} জন</Badge>
+                </h4>
+                <div className="space-y-1.5">
+                  {currentGuestsInRoom.map((g) => (
+                    <div key={g.id} className="bg-blue-50/70 border border-blue-100 rounded-lg px-3 py-2.5">
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm text-gray-800">{g.name}</p>
+                          {g.mobile && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="size-3" />{g.mobile}</p>}
+                          {g.address && <p className="text-xs text-gray-500">{g.address}</p>}
+                          {g.referredBy && <p className="text-xs text-gray-400">রেফার: {g.referredBy}</p>}
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            <Calendar className="size-3 inline mr-0.5" />
+                            চেক-ইন: {formatDate(g.checkInDate)}{g.checkInTime ? ` ${g.checkInTime}` : ''}
+                          </p>
+                          {g.checkOutDate && (
+                            <p className="text-xs text-red-500 mt-0.5">
+                              <LogOut className="size-3 inline mr-0.5" />
+                              চেক-আউট: {formatDate(g.checkOutDate)}{g.checkOutTime ? ` ${g.checkOutTime}` : ''}
+                            </p>
+                          )}
+                          {g.totalBill && <p className="text-xs text-gray-600 mt-0.5">বিল: {g.totalBill}</p>}
+                          {g.note && <p className="text-xs text-gray-400 mt-0.5">{g.note}</p>}
+                        </div>
+                        <div className="flex gap-1 flex-shrink-0 ml-2">
+                          <button onClick={() => openEditGuestInRoom(g)} className="size-6 rounded-md bg-white shadow-sm border text-blue-500 hover:bg-blue-50 flex items-center justify-center" title="এডিট">
+                            <Edit3 className="size-3" />
+                          </button>
+                          <button onClick={() => openVacateGuestInRoom(g)} className="size-6 rounded-md bg-orange-50 border border-orange-200 text-orange-500 hover:bg-orange-100 flex items-center justify-center" title="রুম খালি করুন">
+                            <LogOut className="size-3" />
+                          </button>
+                          <button onClick={() => openDeleteGuestInRoom(g)} className="size-6 rounded-md bg-white shadow-sm border text-red-400 hover:bg-red-50 flex items-center justify-center" title="মুছুন">
+                            <Trash2 className="size-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1783,6 +2023,115 @@ function BuildingsTab() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Edit Guest in Room Dialog */}
+        <Dialog open={editGuestInRoom} onOpenChange={setEditGuestInRoom}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-blue-600">
+                <Edit3 className="size-5" />
+                গেস্ট তথ্য সম্পাদনা
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">নাম</Label>
+                <Input className="h-8 text-sm" value={editGuestNameInRoom} onChange={(e) => setEditGuestNameInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">ফোন</Label>
+                <Input className="h-8 text-sm" value={editGuestMobileInRoom} onChange={(e) => setEditGuestMobileInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">ঠিকানা</Label>
+                <Input className="h-8 text-sm" value={editGuestAddressInRoom} onChange={(e) => setEditGuestAddressInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">রেফার করেছেন</Label>
+                <Input className="h-8 text-sm" value={editGuestReferredByInRoom} onChange={(e) => setEditGuestReferredByInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-ইন তারিখ</Label>
+                <Input className="h-8 text-sm" type="date" value={editGuestCheckInDateInRoom} onChange={(e) => setEditGuestCheckInDateInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-ইন সময়</Label>
+                <Input className="h-8 text-sm" type="time" value={editGuestCheckInTimeInRoom} onChange={(e) => setEditGuestCheckInTimeInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-আউট তারিখ</Label>
+                <Input className="h-8 text-sm" type="date" value={editGuestCheckOutDateInRoom} onChange={(e) => setEditGuestCheckOutDateInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-আউট সময়</Label>
+                <Input className="h-8 text-sm" type="time" value={editGuestCheckOutTimeInRoom} onChange={(e) => setEditGuestCheckOutTimeInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">বিল</Label>
+                <Input className="h-8 text-sm" value={editGuestTotalBillInRoom} onChange={(e) => setEditGuestTotalBillInRoom(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">নোট</Label>
+                <Input className="h-8 text-sm" value={editGuestNoteInRoom} onChange={(e) => setEditGuestNoteInRoom(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setEditGuestInRoom(false)}>বাতিল</Button>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveGuestEditInRoom} disabled={savingGuestEditInRoom || !editGuestNameInRoom.trim()}>
+                {savingGuestEditInRoom ? "হচ্ছে..." : "আপডেট করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Guest Confirm Dialog */}
+        <AlertDialog open={deleteGuestInRoomOpen} onOpenChange={setDeleteGuestInRoomOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600">গেস্ট মুছে ফেলবেন?</AlertDialogTitle>
+              <AlertDialogDescription>
+                &quot;{deleteGuestNameInRoom}&quot; এর সকল তথ্য স্থায়ীভাবে মুছে যাবে।
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>বাতিল</AlertDialogCancel>
+              <AlertDialogAction className="bg-red-600 hover:bg-red-700 text-white" onClick={handleDeleteGuestInRoom} disabled={deletingGuestInRoom}>
+                {deletingGuestInRoom ? "হচ্ছে..." : "মুছে ফেলুন"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Vacate Guest (Room Checkout) Dialog */}
+        <Dialog open={vacateGuestInRoomOpen} onOpenChange={setVacateGuestInRoomOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-orange-600">
+                <LogOut className="size-5" />
+                রুম খালি করুন
+              </DialogTitle>
+              <DialogDescription>
+                &quot;{vacateGuestNameInRoom}&quot; এর চেক-আউট তথ্য দিন। রুম খালি হয়ে যাবে এবং তথ্য রেকর্ড থাকবে।
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-আউট তারিখ *</Label>
+                <Input className="h-8 text-sm" type="date" value={vacateCheckOutDate} onChange={(e) => setVacateCheckOutDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">চেক-আউট সময়</Label>
+                <Input className="h-8 text-sm" type="time" value={vacateCheckOutTime} onChange={(e) => setVacateCheckOutTime(e.target.value)} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setVacateGuestInRoomOpen(false)}>বাতিল</Button>
+              <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white" onClick={handleVacateGuestInRoom} disabled={!vacateCheckOutDate || vacatingGuestInRoom}>
+                {vacatingGuestInRoom ? "হচ্ছে..." : "রুম খালি করুন"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {buildings.length === 0 && (
