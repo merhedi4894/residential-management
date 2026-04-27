@@ -866,6 +866,7 @@ function BuildingsTab() {
           roomNumber: ftRoomNumber,
           startDate: ftStartDate,
           inventoryItems: ftInvItems.filter(i => i.itemName.trim()),
+          skipDeactivate: true,
         }),
       });
       if (!res1.ok) throw new Error();
@@ -2966,6 +2967,7 @@ function TenantsTab() {
           roomNumber: tRoomNumber,
           startDate: tStartDate,
           inventoryItems: invItems.filter((i) => i.itemName.trim()),
+          skipDeactivate: true,
         }),
       });
       if (!res1.ok) throw new Error();
