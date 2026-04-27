@@ -1982,26 +1982,26 @@ function BuildingsTab() {
                           <p className="text-[10px] sm:text-xs text-muted-foreground pl-6 sm:pl-8">এই তলায় কোনো রুম নেই</p>
                         )}
 
-                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 pl-6 sm:pl-8">
+                        <div className="grid grid-cols-3 gap-2 pl-6">
                           {floor.rooms?.map((room) => {
                             const tenantCount = room.tenants?.length || 0;
                             const roomBg = tenantCount === 0 ? 'bg-white border-gray-300' : tenantCount === 1 ? 'bg-green-100 border-green-400 ring-1 ring-green-300' : 'bg-red-100 border-red-400 ring-1 ring-red-300';
                             return (
                             <div
                               key={room.id}
-                              className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 sm:px-4 sm:py-4 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
+                              className={`relative flex flex-col items-center justify-center rounded-xl border ${roomBg} px-3 py-3 text-center cursor-pointer transition-all duration-150 hover:shadow-md hover:scale-[1.04] group/room`}
                               onClick={() => openRoomDetailDialog(room.id, room.roomNumber, building.name)}
                             >
-                              <BedDouble className={`size-4 sm:size-5 mb-1 ${tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
-                              <span className="font-bold text-xs sm:text-sm text-gray-800">{room.roomNumber}</span>
+                              <BedDouble className={`size-4 mb-1 ${tenantCount === 0 ? 'text-gray-400' : tenantCount === 1 ? 'text-green-600' : 'text-red-600'}`} />
+                              <span className="font-bold text-xs text-gray-800">{room.roomNumber}</span>
                               {tenantCount === 0 ? (
-                                <span className="mt-1 text-[10px] sm:text-[11px] text-gray-400">খালি</span>
+                                <span className="mt-1 text-[10px] text-gray-400">খালি</span>
                               ) : tenantCount === 1 ? (
-                                <span className="mt-1 flex items-center gap-0.5 text-[10px] sm:text-[11px] text-green-600 font-medium">
+                                <span className="mt-1 flex items-center gap-0.5 text-[10px] text-green-600 font-medium">
                                   <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
                                 </span>
                               ) : (
-                                <span className="mt-1 flex items-center gap-0.5 text-[10px] sm:text-[11px] text-red-600 font-medium">
+                                <span className="mt-1 flex items-center gap-0.5 text-[10px] text-red-600 font-medium">
                                   <Users className="size-2.5" />{toBanglaNumber(tenantCount)} জন
                                 </span>
                               )}
@@ -2009,17 +2009,17 @@ function BuildingsTab() {
                               <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover/room:opacity-100 transition-opacity">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); openEditRoomDialog(room.id, room.roomNumber); }}
-                                  className="flex items-center justify-center size-5 sm:size-6 rounded-md bg-white shadow-sm border text-blue-500 hover:bg-blue-50 transition-colors"
+                                  className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-blue-500 hover:bg-blue-50 transition-colors"
                                 >
-                                  <Edit3 className="size-2.5 sm:size-3" />
+                                  <Edit3 className="size-2.5" />
                                 </button>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <button
                                       onClick={(e) => e.stopPropagation()}
-                                      className="flex items-center justify-center size-5 sm:size-6 rounded-md bg-white shadow-sm border text-red-400 hover:bg-red-50 transition-colors"
+                                      className="flex items-center justify-center size-5 rounded-md bg-white shadow-sm border text-red-400 hover:bg-red-50 transition-colors"
                                     >
-                                      <Trash2 className="size-2.5 sm:size-3" />
+                                      <Trash2 className="size-2.5" />
                                     </button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
