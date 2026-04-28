@@ -337,7 +337,10 @@ export default function HomePage() {
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    fetch("/api/auth/me", { signal: controller.signal })
       .then((r) => {
         if (r.ok) return r.json();
         throw new Error();
@@ -349,6 +352,8 @@ export default function HomePage() {
       .catch(() => {
         window.location.href = "/login";
       });
+
+    return () => { clearTimeout(timeout); controller.abort(); };
   }, []);
 
   // Auto-logout after 10 minutes of inactivity
@@ -387,9 +392,12 @@ export default function HomePage() {
     };
   }, [checking]);
 
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
+  const handleLogout = () => {
+    // Clear cookie client-side immediately for instant redirect
+    document.cookie = 'session_token=; path=/; max-age=0' + (location.protocol === 'https:' ? '; secure' : '');
     window.location.href = "/login";
+    // Clear session in background (non-blocking)
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
   };
 
   const handleChangePassword = async () => {

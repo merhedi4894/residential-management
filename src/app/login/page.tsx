@@ -51,35 +51,38 @@ export default function LoginPage() {
   const [recoverShowPassword, setRecoverShowPassword] = useState(false);
 
   useEffect(() => {
-    // Check if user is already authenticated
-    fetch("/api/auth/me")
-      .then((r) => {
-        if (r.ok) {
-          return r.json().then((data) => {
-            if (data.needsSetup) {
-              setViewMode("setup");
-            } else {
-              router.push("/");
-            }
-          });
+    let cancelled = false;
+    // Show login form immediately for instant perceived performance
+    // Check auth and init status in background
+    const checkAuth = async () => {
+      try {
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.ok && !cancelled) {
+          const data = await meRes.json();
+          if (data.needsSetup) {
+            setViewMode("setup");
+            return;
+          }
+          router.push("/");
+          return;
         }
-        // Not authenticated, check if setup needed
-        return fetch("/api/auth/init");
-      })
-      .then((initRes) => {
-        if (!initRes) return;
-        return initRes.json();
-      })
-      .then((initData) => {
+      } catch { /* continue to init check */ }
+
+      try {
+        const initRes = await fetch("/api/auth/init");
+        if (!initRes || cancelled) return;
+        const initData = await initRes.json();
         if (initData?.needsInit) {
           setViewMode("setup");
         } else {
           setViewMode("login");
         }
-      })
-      .catch(() => {
-        setViewMode("login");
-      });
+      } catch {
+        if (!cancelled) setViewMode("login");
+      }
+    };
+    checkAuth();
+    return () => { cancelled = true; };
   }, [router]);
 
   // ── Login Handler ──
@@ -234,11 +237,16 @@ export default function LoginPage() {
     }
   };
 
-  // ── Loading screen ──
+  // ── Loading screen ── (kept minimal - actual form shows almost instantly)
   if (viewMode === "loading") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-emerald-50/30 flex items-center justify-center">
-        <div className="size-8 border-3 border-emerald-200 border-t-emerald-600 rounded-full animate-spin" />
+        <div className="w-full max-w-md text-center">
+          <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200 mb-4">
+            <Building2 className="size-7" />
+          </div>
+          <div className="size-6 border-2 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto" />
+        </div>
       </div>
     );
   }

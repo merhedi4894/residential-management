@@ -145,8 +145,18 @@ export async function POST(req: NextRequest) {
 // GET - Check if init is needed (no users exist)
 export async function GET() {
   try {
-    await ensureTablesExist();
+    // Fast check: just count users without full table creation
+    const client = getLibsqlClient();
+    if (client) {
+      try {
+        const result = await client.execute({ sql: `SELECT COUNT(*) as cnt FROM "User"` });
+        return NextResponse.json({ needsInit: (result.rows[0]?.cnt as number) === 0 });
+      } catch {
+        return NextResponse.json({ needsInit: true });
+      }
+    }
 
+    // Local fallback
     const userCount = await db.user.count();
     return NextResponse.json({ needsInit: userCount === 0 });
   } catch (error: any) {

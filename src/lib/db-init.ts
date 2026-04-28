@@ -13,7 +13,10 @@ function getLibsqlClient(): Client | null {
   const url = process.env.DATABASE_URL || '';
   if (!url.startsWith('libsql://')) return null;
   if (!_client) {
-    _client = createClient({ url });
+    const config: { url: string; authToken?: string } = { url };
+    const token = process.env.TURSO_AUTH_TOKEN || '';
+    if (token) config.authToken = token;
+    _client = createClient(config as any);
   }
   return _client;
 }
@@ -31,7 +34,8 @@ export async function ensureTablesExist(): Promise<boolean> {
     console.log('[db-init] Checking/creating tables...');
 
     // Create tables in order (respecting foreign key dependencies)
-    const statements = [
+    // Using batch for faster execution on Turso
+    const createStatements = [
       // User table
       `CREATE TABLE IF NOT EXISTS "User" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -45,7 +49,9 @@ export async function ensureTablesExist(): Promise<boolean> {
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key" ON "User"("username")`,
+    ];
 
+    const schemaStatements = [
       // Building table
       `CREATE TABLE IF NOT EXISTS "Building" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -55,7 +61,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
-
       // Floor table
       `CREATE TABLE IF NOT EXISTS "Floor" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -65,7 +70,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("buildingId") REFERENCES "Building"("id") ON DELETE CASCADE
       )`,
-
       // Room table
       `CREATE TABLE IF NOT EXISTS "Room" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -75,7 +79,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("floorId") REFERENCES "Floor"("id") ON DELETE CASCADE
       )`,
-
       // Tenant table
       `CREATE TABLE IF NOT EXISTS "Tenant" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -90,7 +93,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
-
       // Inventory table
       `CREATE TABLE IF NOT EXISTS "Inventory" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -107,7 +109,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE,
         FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE SET NULL
       )`,
-
       // TroubleReport table
       `CREATE TABLE IF NOT EXISTS "TroubleReport" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -124,7 +125,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
-
       // VacateRecord table
       `CREATE TABLE IF NOT EXISTS "VacateRecord" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -138,7 +138,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE,
         FOREIGN KEY ("roomId") REFERENCES "Room"("id") ON DELETE CASCADE
       )`,
-
       // Guest table
       `CREATE TABLE IF NOT EXISTS "Guest" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -154,7 +153,6 @@ export async function ensureTablesExist(): Promise<boolean> {
         "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
-
       // BelongingTemplate table
       `CREATE TABLE IF NOT EXISTS "BelongingTemplate" (
         "id" TEXT NOT NULL PRIMARY KEY,
@@ -167,12 +165,17 @@ export async function ensureTablesExist(): Promise<boolean> {
       )`,
     ];
 
-    for (const sql of statements) {
-      try {
-        await client.execute(sql);
-      } catch (err: any) {
-        console.warn('[db-init] Statement warning:', err?.message || err);
-      }
+    // Execute in two batches (User first, then schema tables with FK dependencies)
+    try {
+      await client.batch(createStatements as any[]);
+    } catch (err: any) {
+      console.warn('[db-init] Batch 1 warning:', err?.message || err);
+    }
+
+    try {
+      await client.batch(schemaStatements as any[]);
+    } catch (err: any) {
+      console.warn('[db-init] Batch 2 warning:', err?.message || err);
     }
 
     // Migrations: add columns if they don't exist

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { ensureTablesExist } from '@/lib/db-init';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 // POST - Login with username and password
 export async function POST(req: NextRequest) {
   try {
-    await ensureTablesExist();
-
     const { username, password } = await req.json();
 
     if (!username || !password) {

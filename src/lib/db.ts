@@ -24,6 +24,11 @@ function createPrismaClient(): PrismaClient {
       })
     } catch (err) {
       console.error('[db] Turso adapter failed:', err)
+      // Fallback to local SQLite if Turso fails
+      console.log('[db] Falling back to local SQLite')
+      return new PrismaClient({
+        log: ['error'],
+      })
     }
   }
 
