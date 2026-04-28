@@ -752,6 +752,11 @@ function BuildingsTab() {
   const [prevTenantPage, setPrevTenantPage] = useState(1);
   const PREV_TENANT_PER_PAGE = 5;
 
+  // Inventory pagination in room detail dialog
+  const [invPage, setInvPage] = useState(1);
+  const INV_PER_PAGE = 15;
+  const [prevInvPage, setPrevInvPage] = useState(1);
+
   // Edit tenant from room detail dialog
   const [editTenantInRoom, setEditTenantInRoom] = useState(false);
   const [editTenantIdInRoom, setEditTenantIdInRoom] = useState("");
@@ -1323,6 +1328,8 @@ function BuildingsTab() {
     setRoomDetailOpen(true);
     setRoomDetailData(null);
     setPrevTenantPage(1);
+    setInvPage(1);
+    setPrevInvPage(1);
     try {
       const res = await fetch(`/api/room-wise-data?roomId=${roomId}`);
       if (!res.ok) throw new Error();
@@ -2020,50 +2027,65 @@ function BuildingsTab() {
                 </div>
 
                 {/* Current Inventory / Belongings */}
-                {roomDetailData.currentInventory.length > 0 && (
-                  <div>
-                    <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
-                      <Package className="size-4 text-blue-600" />
-                      বর্তমান মালামাল
-                      <Badge className="bg-blue-100 text-blue-700 text-[10px]">{toBanglaNumber(roomDetailData.currentInventory.length)} টি</Badge>
-                    </h4>
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-blue-50/50">
-                            <TableHead className="text-xs h-8">জিনিস</TableHead>
-                            <TableHead className="text-xs h-8 text-center">পরিমাণ</TableHead>
-                            <TableHead className="text-xs h-8 text-center">অবস্থা</TableHead>
-                            <TableHead className="text-xs h-8 text-center">অ্যাকশন</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {roomDetailData.currentInventory.map((item) => (
-                            <TableRow key={item.id} className="text-xs">
-                              <TableCell className="py-1.5 font-medium">{item.itemName}</TableCell>
-                              <TableCell className="py-1.5 text-center">{toBanglaNumber(item.quantity)}</TableCell>
-                              <TableCell className="py-1.5 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${item.condition === 'ভালো' ? 'bg-emerald-100 text-emerald-700' : item.condition === 'মাঝারি' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                  {item.condition}
-                                </span>
-                              </TableCell>
-                              <TableCell className="py-1.5 text-center">
-                                <div className="flex justify-center gap-1">
-                                  <button onClick={() => openEditInvInRoom(item)} className="size-5 rounded bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center">
-                                    <Edit3 className="size-2.5" />
-                                  </button>
-                                  <button onClick={() => openDeleteInvInRoom(item)} className="size-5 rounded bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center">
-                                    <Trash2 className="size-2.5" />
-                                  </button>
-                                </div>
-                              </TableCell>
+                {(() => {
+                  const allInv = roomDetailData.currentInventory;
+                  if (allInv.length === 0) return null;
+                  const totalPages = Math.ceil(allInv.length / INV_PER_PAGE);
+                  const pageInv = allInv.slice((invPage - 1) * INV_PER_PAGE, invPage * INV_PER_PAGE);
+                  return (
+                    <div>
+                      <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
+                        <Package className="size-4 text-blue-600" />
+                        বর্তমান মালামাল
+                        <Badge className="bg-blue-100 text-blue-700 text-[10px]">{toBanglaNumber(allInv.length)} টি</Badge>
+                      </h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-blue-50/50">
+                              <TableHead className="text-xs h-8">জিনিস</TableHead>
+                              <TableHead className="text-xs h-8 text-center">পরিমাণ</TableHead>
+                              <TableHead className="text-xs h-8 text-center">অবস্থা</TableHead>
+                              <TableHead className="text-xs h-8 text-center">অ্যাকশন</TableHead>
                             </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pageInv.map((item) => (
+                              <TableRow key={item.id} className="text-xs">
+                                <TableCell className="py-1.5 font-medium">{item.itemName}</TableCell>
+                                <TableCell className="py-1.5 text-center">{toBanglaNumber(item.quantity)}</TableCell>
+                                <TableCell className="py-1.5 text-center">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${item.condition === 'ভালো' ? 'bg-emerald-100 text-emerald-700' : item.condition === 'মাঝারি' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                    {item.condition}
+                                  </span>
+                                </TableCell>
+                                <TableCell className="py-1.5 text-center">
+                                  <div className="flex justify-center gap-1">
+                                    <button onClick={() => openEditInvInRoom(item)} className="size-5 rounded bg-blue-50 text-blue-500 hover:bg-blue-100 flex items-center justify-center">
+                                      <Edit3 className="size-2.5" />
+                                    </button>
+                                    <button onClick={() => openDeleteInvInRoom(item)} className="size-5 rounded bg-red-50 text-red-400 hover:bg-red-100 flex items-center justify-center">
+                                      <Trash2 className="size-2.5" />
+                                    </button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={invPage <= 1} onClick={() => setInvPage(invPage - 1)}>আগে</Button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                            <Button key={p} variant={p === invPage ? "default" : "outline"} size="sm" className="h-6 w-6 text-[10px] p-0" onClick={() => setInvPage(p)}>{p}</Button>
                           ))}
-                        </TableBody>
-                      </Table>
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={invPage >= totalPages} onClick={() => setInvPage(invPage + 1)}>পরে</Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Previous Tenants */}
                 {(() => {
@@ -2106,39 +2128,54 @@ function BuildingsTab() {
                 })()}
 
                 {/* Previous Inventory */}
-                {roomDetailData.previousInventory.length > 0 && (
-                  <div>
-                    <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
-                      <Package className="size-4 text-gray-400" />
-                      পূর্বের মালামাল
-                      <Badge variant="outline" className="text-[10px]">{toBanglaNumber(roomDetailData.previousInventory.length)} টি</Badge>
-                    </h4>
-                    <div className="border rounded-lg overflow-hidden">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-gray-50">
-                            <TableHead className="text-xs h-8">জিনিস</TableHead>
-                            <TableHead className="text-xs h-8 text-center">পরিমাণ</TableHead>
-                            <TableHead className="text-xs h-8 text-center">অবস্থা</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {roomDetailData.previousInventory.map((item) => (
-                            <TableRow key={item.id} className="text-xs text-gray-500">
-                              <TableCell className="py-1.5">{item.itemName}</TableCell>
-                              <TableCell className="py-1.5 text-center">{toBanglaNumber(item.quantity)}</TableCell>
-                              <TableCell className="py-1.5 text-center">
-                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${item.condition === 'ভালো' ? 'bg-emerald-100 text-emerald-700' : item.condition === 'মাঝারি' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
-                                  {item.condition}
-                                </span>
-                              </TableCell>
+                {(() => {
+                  const allPrevInv = roomDetailData.previousInventory;
+                  if (allPrevInv.length === 0) return null;
+                  const totalPages = Math.ceil(allPrevInv.length / INV_PER_PAGE);
+                  const pageInv = allPrevInv.slice((prevInvPage - 1) * INV_PER_PAGE, prevInvPage * INV_PER_PAGE);
+                  return (
+                    <div>
+                      <h4 className="flex items-center gap-1.5 text-sm font-semibold text-gray-800 mb-2">
+                        <Package className="size-4 text-gray-400" />
+                        পূর্বের মালামাল
+                        <Badge variant="outline" className="text-[10px]">{toBanglaNumber(allPrevInv.length)} টি</Badge>
+                      </h4>
+                      <div className="border rounded-lg overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-gray-50">
+                              <TableHead className="text-xs h-8">জিনিস</TableHead>
+                              <TableHead className="text-xs h-8 text-center">পরিমাণ</TableHead>
+                              <TableHead className="text-xs h-8 text-center">অবস্থা</TableHead>
                             </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {pageInv.map((item) => (
+                              <TableRow key={item.id} className="text-xs text-gray-500">
+                                <TableCell className="py-1.5">{item.itemName}</TableCell>
+                                <TableCell className="py-1.5 text-center">{toBanglaNumber(item.quantity)}</TableCell>
+                                <TableCell className="py-1.5 text-center">
+                                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${item.condition === 'ভালো' ? 'bg-emerald-100 text-emerald-700' : item.condition === 'মাঝারি' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                    {item.condition}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={prevInvPage <= 1} onClick={() => setPrevInvPage(prevInvPage - 1)}>আগে</Button>
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                            <Button key={p} variant={p === prevInvPage ? "default" : "outline"} size="sm" className="h-6 w-6 text-[10px] p-0" onClick={() => setPrevInvPage(p)}>{p}</Button>
                           ))}
-                        </TableBody>
-                      </Table>
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" disabled={prevInvPage >= totalPages} onClick={() => setPrevInvPage(prevInvPage + 1)}>পরে</Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* No data at all */}
                 {roomDetailData.currentTenants.length === 0 && roomDetailData.currentInventory.length === 0 && roomDetailData.previousTenants.length === 0 && (
