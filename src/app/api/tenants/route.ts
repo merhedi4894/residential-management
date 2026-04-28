@@ -51,6 +51,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Always delete old disconnected (previous) inventory items for this room
+    // They are being replaced by the new tenant (even if no inventory sent)
+    await db.inventory.deleteMany({
+      where: { roomId, tenantId: null },
+    });
+
     // Create initial inventory items
     if (inventoryItems && inventoryItems.length > 0) {
       // Get roomNumber from room if not provided
@@ -59,12 +65,6 @@ export async function POST(req: NextRequest) {
         const room = await db.room.findUnique({ where: { id: roomId } });
         if (room) roomNumber = room.roomNumber;
       }
-
-      // Delete old disconnected (previous) inventory items for this room
-      // since they are being replaced by the new tenant's items
-      await db.inventory.deleteMany({
-        where: { roomId, tenantId: null },
-      });
 
       await db.inventory.createMany({
         data: inventoryItems.map((item: { itemName: string; quantity: number; condition: string; note?: string }) => ({

@@ -96,7 +96,8 @@ export async function GET(req: NextRequest) {
           if (currentTenants.length > 0) {
             const activeTenantIds = new Set(currentTenants.map((t) => t.id));
             currentInventory = roomInventory.filter((inv) => inv.tenantId && activeTenantIds.has(inv.tenantId));
-            previousInventory = roomInventory.filter((inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId));
+            // When active tenants exist, previous inventory should be empty
+            previousInventory = [];
           } else if (allTenants.length > 0) {
             const latestTenant = allTenants[0];
             currentInventory = roomInventory.filter((inv) => inv.tenantId === latestTenant.id);
@@ -165,9 +166,9 @@ export async function GET(req: NextRequest) {
       currentInventory = allInventory.filter(
         (inv) => inv.tenantId && activeTenantIds.has(inv.tenantId)
       );
-      previousInventory = allInventory.filter(
-        (inv) => !inv.tenantId || !activeTenantIds.has(inv.tenantId)
-      );
+      // When active tenants exist, previous inventory should be empty
+      // (old disconnected items are cleaned up by vacate/tenant creation)
+      previousInventory = [];
     } else if (allTenants.length > 0) {
       const latestTenant = allTenants[0];
       currentInventory = allInventory.filter(

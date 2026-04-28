@@ -675,6 +675,10 @@ function BuildingsTab() {
   const [newTenantPhone, setNewTenantPhone] = useState("");
   const [newTenantStartDate, setNewTenantStartDate] = useState("");
   const [addingTenantToRoom, setAddingTenantToRoom] = useState(false);
+  // Previous inventory items loaded for new tenant (auto-filled)
+  const [roomPrevInvItems, setRoomPrevInvItems] = useState<{ itemName: string; quantity: string; condition: string }[]>([]);
+  const [roomPrevTenantName, setRoomPrevTenantName] = useState("");
+  const [loadingRoomPrevInv, setLoadingRoomPrevInv] = useState(false);
 
   // Vacate tenant from room detail dialog
   const [vacateTenantOpen, setVacateTenantOpen] = useState(false);
@@ -914,6 +918,7 @@ function BuildingsTab() {
           roomId: roomDetailData.roomId,
           roomNumber: roomDetailData.roomNumber,
           startDate: newTenantStartDate,
+          inventoryItems: roomPrevInvItems.filter(i => i.itemName.trim()),
           skipDeactivate: true,
         }),
       });
@@ -923,6 +928,8 @@ function BuildingsTab() {
       setNewTenantDesignation("");
       setNewTenantPhone("");
       setNewTenantStartDate("");
+      setRoomPrevInvItems([]);
+      setRoomPrevTenantName("");
       setAddTenantToRoom(false);
       refreshData();
       // Reload room detail
@@ -931,6 +938,36 @@ function BuildingsTab() {
       toast.error("ভাড়াটে যোগ করতে সমস্যা হয়েছে");
     } finally {
       setAddingTenantToRoom(false);
+    }
+  };
+
+  // Open add-tenant form and auto-load previous inventory
+  const openAddTenantToRoom = async () => {
+    setAddTenantToRoom(true);
+    setRoomPrevInvItems([]);
+    setRoomPrevTenantName("");
+    if (!roomDetailData?.roomId) return;
+    try {
+      setLoadingRoomPrevInv(true);
+      const res = await fetch(`/api/inventory?roomId=${roomDetailData.roomId}&lastTenant=true`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (Array.isArray(data) || !data.items || data.items.length === 0) {
+        setRoomPrevInvItems([]);
+        setRoomPrevTenantName("");
+      } else {
+        setRoomPrevInvItems(data.items.map((item: any) => ({
+          itemName: item.itemName,
+          quantity: String(item.quantity),
+          condition: item.condition,
+        })));
+        setRoomPrevTenantName(data.tenantName || "");
+      }
+    } catch {
+      setRoomPrevInvItems([]);
+      setRoomPrevTenantName("");
+    } finally {
+      setLoadingRoomPrevInv(false);
     }
   };
 
@@ -4899,8 +4936,12 @@ function OverviewTab() {
                   <div className="flex-1 border-t border-emerald-200" />
                 </div>
                 {floorMap[Number(floorNum)].map((roomData: any) => {
-                  const allItems = [...(roomData.currentInventory || []), ...(roomData.previousInventory || [])];
-                  const uniqueItems = Array.from(new Map(allItems.map((item: any) => [item.id, item])).values());
+                  // Only show current inventory when room has active tenants
+                  // Previous inventory is hidden because it should be empty (items adopted by current tenant)
+                  const displayItems = roomData.currentTenants?.length > 0
+                    ? (roomData.currentInventory || [])
+                    : [...(roomData.currentInventory || []), ...(roomData.previousInventory || [])];
+                  const uniqueItems = Array.from(new Map(displayItems.map((item: any) => [item.id, item])).values());
                   return (
                     <Card key={roomData.roomId}>
                       <CardHeader className="py-2 px-4">
