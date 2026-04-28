@@ -27,7 +27,9 @@ export async function GET(req: NextRequest) {
       buildingName: t.room?.floor?.building?.name || "",
     }));
 
-    return NextResponse.json(tenantsWithBuilding);
+    return NextResponse.json(tenantsWithBuilding, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
   } catch (error) {
     return NextResponse.json({ error: 'ভাড়াটে লোড করতে সমস্যা হয়েছে' }, { status: 500 });
   }

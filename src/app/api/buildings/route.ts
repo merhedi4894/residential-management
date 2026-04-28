@@ -21,7 +21,9 @@ export async function GET() {
       },
       orderBy: { createdAt: 'asc' },
     });
-    return NextResponse.json(buildings);
+    return NextResponse.json(buildings, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
   } catch (error) {
     return NextResponse.json({ error: 'বিল্ডিং লোড করতে সমস্যা হয়েছে' }, { status: 500 });
   }

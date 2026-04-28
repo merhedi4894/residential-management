@@ -19,7 +19,9 @@ export async function GET(req: NextRequest) {
       include: { room: true },
       orderBy: { reportedAt: 'desc' },
     });
-    return NextResponse.json(reports);
+    return NextResponse.json(reports, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
   } catch (error) {
     return NextResponse.json({ error: 'ট্রাবল রিপোর্ট লোড করতে সমস্যা হয়েছে' }, { status: 500 });
   }

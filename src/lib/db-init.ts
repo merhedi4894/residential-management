@@ -9,7 +9,7 @@ let _client: Client | null = null;
 let _tablesVerified = false;
 let _tablesCheckAttempted = false;
 
-function getLibsqlClient(): Client | null {
+export function getLibsqlClient(): Client | null {
   const url = process.env.DATABASE_URL || '';
   if (!url.startsWith('libsql://')) return null;
   if (!_client) {

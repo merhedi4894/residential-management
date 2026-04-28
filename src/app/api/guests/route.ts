@@ -88,7 +88,9 @@ export async function GET(req: NextRequest) {
       orderBy: { checkInDate: "desc" },
     });
 
-    return NextResponse.json(guests);
+    return NextResponse.json(guests, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
   } catch (error) {
     console.error("Guest GET error:", error);
     return NextResponse.json({ error: "গেস্ট লোড করতে সমস্যা হয়েছে" }, { status: 500 });

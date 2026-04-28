@@ -121,7 +121,9 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ mode: 'allRooms', rooms: allRoomData });
+      return NextResponse.json({ mode: 'allRooms', rooms: allRoomData }, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
     }
 
     // ── Single room mode ──────────────────────────────────────────────
@@ -228,6 +230,8 @@ export async function GET(req: NextRequest) {
         vacatedAt: vr.vacatedAt,
         inventorySnapshot: vr.inventorySnapshot,
       })),
+    }, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
     });
   } catch (error) {
     console.error('[room-wise-data] Error:', error);

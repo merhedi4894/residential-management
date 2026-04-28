@@ -306,15 +306,13 @@ function BuildingsContextWrapper({ children }: { children: React.ReactNode }) {
   }, [buildings]);
 
   useEffect(() => {
+    // Load buildings and booked rooms in parallel on mount
     loadBuildings();
+    loadBookedRooms();
     const handler = () => { loadBuildings(); loadBookedRooms(); };
     window.addEventListener("dashboard-data-changed", handler);
     return () => window.removeEventListener("dashboard-data-changed", handler);
-  }, [loadBuildings]);
-
-  useEffect(() => {
-    loadBookedRooms();
-  }, [loadBookedRooms]);
+  }, [loadBuildings, loadBookedRooms]);
 
   return (
     <BuildingsContext.Provider value={React.useMemo(() => ({ buildings, reloadBuildings: loadBuildings, counts, bookedRoomIds, reloadBookedRooms: loadBookedRooms }), [buildings, loadBuildings, counts, bookedRoomIds, loadBookedRooms])}>
@@ -338,7 +336,7 @@ export default function HomePage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 5000);
 
     fetch("/api/auth/me", { signal: controller.signal })
       .then((r) => {
@@ -1331,9 +1329,13 @@ function BuildingsTab() {
     setInvPage(1);
     setPrevInvPage(1);
     try {
-      const res = await fetch(`/api/room-wise-data?roomId=${roomId}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      // Fetch room data and guests in parallel
+      const [roomRes, guestRes] = await Promise.all([
+        fetch(`/api/room-wise-data?roomId=${roomId}`),
+        fetch(`/api/guests?roomId=${roomId}&active=true`).catch(() => null),
+      ]);
+      if (!roomRes.ok) throw new Error();
+      const data = await roomRes.json();
       setRoomDetailData({
         roomId,
         roomNumber,
@@ -1344,11 +1346,17 @@ function BuildingsTab() {
         previousInventory: data.previousInventory || [],
         vacateRecords: data.vacateRecords || [],
       });
+      // Set guest data in parallel result
+      if (guestRes && guestRes.ok) {
+        const guestData = await guestRes.json();
+        setCurrentGuestsInRoom(guestData);
+      } else {
+        setCurrentGuestsInRoom([]);
+      }
     } catch {
       toast.error("রুমের তথ্য লোড করতে সমস্যা হয়েছে");
     } finally {
       setRoomDetailLoading(false);
-      loadCurrentGuestsForRoom(roomId);
     }
   };
 
@@ -5148,10 +5156,9 @@ function GuestsTab() {
 
   const loadAvailableYears = useCallback(async () => {
     try {
-      const res = await fetch("/api/guests?all=true");
+      const res = await fetch("/api/guests/years");
       if (res.ok) {
-        const allGuests: Guest[] = await res.json();
-        const years = [...new Set(allGuests.map((g) => new Date(g.checkInDate).getFullYear()))].sort((a, b) => b - a);
+        const years: number[] = await res.json();
         setAvailableYears(years);
       }
     } catch { /* চুপ করে থাকুন */ }

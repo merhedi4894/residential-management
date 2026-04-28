@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
         tenantName: lastVacateRecord?.tenantName || "",
         tenantId: lastVacateRecord?.tenantId || "",
         items: inventory,
+      }, {
+        headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
       });
     }
 
@@ -44,7 +46,9 @@ export async function GET(req: NextRequest) {
       include: { tenant: true, room: true },
       orderBy: { addedDate: 'desc' },
     });
-    return NextResponse.json(inventory);
+    return NextResponse.json(inventory, {
+      headers: { 'Cache-Control': 'private, max-age=5, stale-while-revalidate=10' },
+    });
   } catch (error) {
     return NextResponse.json({ error: 'ইনভেন্টরি লোড করতে সমস্যা হয়েছে' }, { status: 500 });
   }
