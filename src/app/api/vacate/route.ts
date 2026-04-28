@@ -74,8 +74,6 @@ export async function POST(req: NextRequest) {
       }
 
       // Process updates - batch in parallel where possible
-      // Note: Prisma doesn't support updateMany with different data per record,
-      // but we can use transactions to speed up
       if (toUpdate.length > 0) {
         await db.$transaction(
           toUpdate.map((item) =>
@@ -133,7 +131,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Disconnect inventory from tenant (set tenantId to null for remaining items)
+    // Delete ALL old disconnected inventory items (tenantId=null) for this room
+    // This ensures only the latest vacated tenant's items remain as "previous inventory"
+    await db.inventory.deleteMany({
+      where: {
+        roomId: tenant.roomId,
+        tenantId: null,
+      },
+    });
+
+    // Disconnect THIS tenant's inventory items (set tenantId to null)
+    // These become the "previous inventory" for the next tenant
     await db.inventory.updateMany({
       where: { tenantId: tenant.id },
       data: { tenantId: null },

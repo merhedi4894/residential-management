@@ -10,25 +10,26 @@ export async function GET(req: NextRequest) {
     const roomNumber = searchParams.get('roomNumber');
     const lastTenant = searchParams.get('lastTenant');
 
-    // If lastTenant=true && roomId provided, get the last (most recent) tenant's inventory for that room
+    // If lastTenant=true && roomId provided, get disconnected (previous) inventory for that room
+    // These are items left by the most recently vacated tenant
     if (lastTenant === 'true' && roomId) {
-      // Find the most recent tenant for this room (active or inactive)
-      const lastTenantRecord = await db.tenant.findFirst({
-        where: { roomId },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (!lastTenantRecord) {
-        return NextResponse.json([]);
-      }
-
       const inventory = await db.inventory.findMany({
-        where: { tenantId: lastTenantRecord.id },
+        where: {
+          roomId: roomId,
+          tenantId: null,
+        },
         orderBy: { addedDate: 'asc' },
       });
+
+      // Also find the last vacated tenant name for display
+      const lastVacateRecord = await db.vacateRecord.findFirst({
+        where: { roomId: roomId },
+        orderBy: { vacatedAt: 'desc' },
+      });
+
       return NextResponse.json({
-        tenantName: lastTenantRecord.name,
-        tenantId: lastTenantRecord.id,
+        tenantName: lastVacateRecord?.tenantName || "",
+        tenantId: lastVacateRecord?.tenantId || "",
         items: inventory,
       });
     }
