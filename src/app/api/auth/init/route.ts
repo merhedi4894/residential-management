@@ -146,9 +146,11 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     // Fast check: just count users without full table creation
-    const client = getLibsqlClient();
-    if (client) {
+    const libsqlConfig = getLibsqlConfig();
+    if (libsqlConfig) {
       try {
+        const { createClient } = await import('@libsql/client');
+        const client = createClient(libsqlConfig as any);
         const result = await client.execute({ sql: `SELECT COUNT(*) as cnt FROM "User"` });
         return NextResponse.json({ needsInit: (result.rows[0]?.cnt as number) === 0 });
       } catch {
