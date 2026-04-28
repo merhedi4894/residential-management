@@ -975,10 +975,14 @@ function BuildingsTab() {
     if (!vacateTenantId) return;
     setVacatingTenant(true);
     try {
-      const res = await fetch("/api/tenants", {
-        method: "PATCH",
+      // Use /api/vacate endpoint which properly handles:
+      // - Creating vacate record with inventory snapshot
+      // - Disconnecting inventory items (set tenantId to null) so they become "previous inventory"
+      // - Cleaning up old disconnected items for the room
+      const res = await fetch("/api/vacate", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: vacateTenantId }),
+        body: JSON.stringify({ tenantId: vacateTenantId }),
       });
       if (!res.ok) throw new Error();
       toast.success(`${vacateTenantName} রুম ছেড়েছেন`);
